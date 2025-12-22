@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import 'api/api_client.dart';
+import 'api/app_config.dart';
+
 void main() {
   runApp(const PosApp());
 }
@@ -258,6 +261,28 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   @override
+  void initState() {
+    super.initState();
+    _refreshSyncStatus();
+  }
+
+  Future<void> _refreshSyncStatus() async {
+    setState(() {
+      _isSyncLoading = true;
+    });
+
+    final status = await _apiClient.ping();
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _syncStatus = status;
+      _isSyncLoading = false;
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     const sidebarWidth = 260.0;
     const username = 'Alex Tan';
@@ -464,6 +489,150 @@ class _RegisterScreenState extends State<RegisterScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildDestinationCard(_SidebarDestination destination) {
+    return Container(
+      width: 520,
+      padding: const EdgeInsets.all(32),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            destination.icon,
+            size: 64,
+            color: const Color(0xFF2C6E9E),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            destination.label,
+            style: const TextStyle(
+              fontSize: 26,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            destination.description,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Color(0xFF5F6368),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSyncCard() {
+    final status = _syncStatus;
+    final isReachable = status?.isReachable ?? false;
+    final statusColor = _isSyncLoading
+        ? const Color(0xFF9E9E9E)
+        : isReachable
+            ? const Color(0xFF2E7D32)
+            : const Color(0xFFC62828);
+    final statusText = _isSyncLoading
+        ? 'Checking CRM API connectivity...'
+        : status == null
+            ? 'Connection status not checked yet.'
+            : isReachable
+                ? 'CRM API reachable (HTTP ${status.statusCode ?? 'OK'}).'
+                : 'Unable to reach CRM API'
+                    '${status.errorMessage == null ? '.' : ': ${status.errorMessage}'}';
+
+    return Container(
+      width: 560,
+      padding: const EdgeInsets.all(32),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'CRM REST API',
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            AppConfig.baseUrl,
+            style: const TextStyle(
+              color: Color(0xFF5F6368),
+              fontSize: 16,
+            ),
+          ),
+          const SizedBox(height: 24),
+          Row(
+            children: [
+              Container(
+                width: 12,
+                height: 12,
+                decoration: BoxDecoration(
+                  color: statusColor,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  statusText,
+                  style: const TextStyle(fontSize: 14),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              ElevatedButton.icon(
+                onPressed: _isSyncLoading ? null : _refreshSyncStatus,
+                icon: const Icon(Icons.sync),
+                label: const Text('Test Connection'),
+              ),
+              OutlinedButton.icon(
+                onPressed: _isSyncLoading ? null : _refreshSyncStatus,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Retry'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'Next steps: configure authentication headers and map CRM endpoints to '
+            'the POS data models.',
+            style: TextStyle(
+              color: Color(0xFF5F6368),
+            ),
+          ),
+        ],
       ),
     );
   }
