@@ -37,7 +37,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final TextEditingController _dateController = TextEditingController();
   final TextEditingController _totalSalesController = TextEditingController();
   final List<_PaymentEntry> _paymentEntries = [];
+  final ApiClient _apiClient = ApiClient();
   DateTime _selectedDate = DateTime.now();
+  ApiStatus? _syncStatus;
+  bool _isSyncLoading = false;
 
   static const List<String> _paymentMethods = [
     'Cash',
@@ -104,6 +107,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     _paymentEntries.add(
       _PaymentEntry(method: _paymentMethods.first),
     );
+    _refreshSyncStatus();
   }
 
   @override
@@ -258,12 +262,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
         ],
       ),
     );
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    _refreshSyncStatus();
   }
 
   Future<void> _refreshSyncStatus() async {
