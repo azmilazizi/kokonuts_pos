@@ -46,8 +46,7 @@ class _AppStartState extends State<AppStart> {
     final prefs = await SharedPreferences.getInstance();
     final hasCompletedActivation =
         prefs.getBool('has_completed_activation') ?? false;
-    final isAuthenticated = prefs.getBool('is_authenticated') ?? false;
-    return !hasCompletedActivation || !isAuthenticated;
+    return !hasCompletedActivation;
   }
 
   void _handleActivated() {
@@ -87,7 +86,7 @@ class RegisterScreen extends StatefulWidget {
 }
 
 class _RegisterScreenState extends State<RegisterScreen> {
-  bool _isSidebarVisible = true;
+  bool _isSidebarVisible = false;
   int _selectedIndex = 5;
   final TextEditingController _dateController = TextEditingController();
   final TextEditingController _totalSalesController = TextEditingController();
@@ -410,18 +409,113 @@ class _RegisterScreenState extends State<RegisterScreen> {
   Widget build(BuildContext context) {
     const sidebarWidth = 260.0;
     const username = 'Alex Tan';
-    final screenWidth = MediaQuery.of(context).size.width;
     final destination = _destinations[_selectedIndex];
+    final mainContent = Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: 24,
+            vertical: 20,
+          ),
+          child: Row(
+            children: [
+              if (!_isSidebarVisible)
+                Padding(
+                  padding: const EdgeInsets.only(right: 12),
+                  child: IconButton(
+                    tooltip: 'Show sidebar',
+                    icon: const Icon(Icons.menu),
+                    color: const Color(0xFF2C6E9E),
+                    onPressed: _toggleSidebar,
+                  ),
+                ),
+              Text(
+                destination.label,
+                style: const TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: Center(
+            child: Container(
+              width: 520,
+              padding: const EdgeInsets.all(32),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.08),
+                    blurRadius: 20,
+                    offset: const Offset(0, 10),
+                  ),
+                ],
+              ),
+              child: destination.label == 'Manual Entry'
+                  ? _buildManualEntryContent()
+                  : Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          destination.icon,
+                          size: 64,
+                          color: const Color(0xFF2C6E9E),
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          destination.label,
+                          style: const TextStyle(
+                            fontSize: 26,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          destination.description,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Color(0xFF5F6368),
+                          ),
+                        ),
+                      ],
+                    ),
+            ),
+          ),
+        ),
+      ],
+    );
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F6FA),
       body: SafeArea(
         child: Stack(
           children: [
-            if (_isSidebarVisible)
-              SizedBox(
+            mainContent,
+            AnimatedOpacity(
+              opacity: _isSidebarVisible ? 1 : 0,
+              duration: const Duration(milliseconds: 200),
+              child: IgnorePointer(
+                ignoring: !_isSidebarVisible,
+                child: GestureDetector(
+                  onTap: _toggleSidebar,
+                  child: Container(
+                    color: Colors.black.withOpacity(0.45),
+                  ),
+                ),
+              ),
+            ),
+            AnimatedSlide(
+              offset: _isSidebarVisible ? Offset.zero : const Offset(-1, 0),
+              duration: const Duration(milliseconds: 250),
+              curve: Curves.easeInOut,
+              child: SizedBox(
                 width: sidebarWidth,
-                child: Container(
+                child: Material(
+                  elevation: 4,
                   color: Colors.white,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -522,92 +616,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       ),
                     ],
                   ),
-                ),
-              ),
-            AnimatedSlide(
-              offset: Offset(_isSidebarVisible ? sidebarWidth / screenWidth : 0, 0),
-              duration: const Duration(milliseconds: 250),
-              curve: Curves.easeInOut,
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: _isSidebarVisible ? _toggleSidebar : null,
-                child: Column(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 24,
-                        vertical: 20,
-                      ),
-                      child: Row(
-                        children: [
-                          if (!_isSidebarVisible)
-                            Padding(
-                              padding: const EdgeInsets.only(right: 12),
-                              child: IconButton(
-                                tooltip: 'Show sidebar',
-                                icon: const Icon(Icons.menu),
-                                color: const Color(0xFF2C6E9E),
-                                onPressed: _toggleSidebar,
-                              ),
-                            ),
-                          Text(
-                            destination.label,
-                            style: const TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Expanded(
-                      child: Center(
-                        child: Container(
-                          width: 520,
-                          padding: const EdgeInsets.all(32),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(16),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.08),
-                                blurRadius: 20,
-                                offset: const Offset(0, 10),
-                              ),
-                            ],
-                          ),
-                          child: destination.label == 'Manual Entry'
-                              ? _buildManualEntryContent()
-                              : Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      destination.icon,
-                                      size: 64,
-                                      color: const Color(0xFF2C6E9E),
-                                    ),
-                                    const SizedBox(height: 16),
-                                    Text(
-                                      destination.label,
-                                      style: const TextStyle(
-                                        fontSize: 26,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 12),
-                                    Text(
-                                      destination.description,
-                                      textAlign: TextAlign.center,
-                                      style: const TextStyle(
-                                        color: Color(0xFF5F6368),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                        ),
-                      ),
-                    ),
-                  ],
                 ),
               ),
             ),
