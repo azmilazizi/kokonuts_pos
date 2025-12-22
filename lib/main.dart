@@ -237,9 +237,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
   double _remainingForIndex(int index) {
     final previousTotal = _paymentEntries
         .take(index)
-        .fold(0, (sum, entry) => sum + _parseAmount(entry.amountController.text));
+        .fold(0.0, (sum, entry) => sum + _parseAmount(entry.amountController.text));
     final remaining = _totalSalesAmount - previousTotal;
-    return remaining > 0 ? remaining : 0;
+    return remaining > 0 ? remaining : 0.0;
   }
 
   String _formatCurrency(double amount) {
