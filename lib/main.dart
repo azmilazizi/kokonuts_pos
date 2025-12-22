@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'api/api_client.dart';
 import 'api/app_config.dart';
+import 'onboarding/activation_screen.dart';
 
 void main() {
   runApp(const PosApp());
@@ -19,7 +21,60 @@ class PosApp extends StatelessWidget {
         useMaterial3: true,
         fontFamily: 'Roboto',
       ),
-      home: const RegisterScreen(),
+      home: const AppStart(),
+    );
+  }
+}
+
+class AppStart extends StatefulWidget {
+  const AppStart({super.key});
+
+  @override
+  State<AppStart> createState() => _AppStartState();
+}
+
+class _AppStartState extends State<AppStart> {
+  late Future<bool> _showActivationFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _showActivationFuture = _shouldShowActivation();
+  }
+
+  Future<bool> _shouldShowActivation() async {
+    final prefs = await SharedPreferences.getInstance();
+    final hasCompletedActivation =
+        prefs.getBool('has_completed_activation') ?? false;
+    final isAuthenticated = prefs.getBool('is_authenticated') ?? false;
+    return !hasCompletedActivation || !isAuthenticated;
+  }
+
+  void _handleActivated() {
+    setState(() {
+      _showActivationFuture = Future.value(false);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<bool>(
+      future: _showActivationFuture,
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const Scaffold(
+            body: Center(
+              child: CircularProgressIndicator(),
+            ),
+          );
+        }
+
+        if (snapshot.data == true) {
+          return ActivationScreen(onActivated: _handleActivated);
+        }
+
+        return const RegisterScreen();
+      },
     );
   }
 }
