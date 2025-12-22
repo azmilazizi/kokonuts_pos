@@ -21,8 +21,21 @@ class PosApp extends StatelessWidget {
   }
 }
 
-class RegisterScreen extends StatelessWidget {
+class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
+
+  @override
+  State<RegisterScreen> createState() => _RegisterScreenState();
+}
+
+class _RegisterScreenState extends State<RegisterScreen> {
+  bool _isSidebarVisible = true;
+
+  void _toggleSidebar() {
+    setState(() {
+      _isSidebarVisible = !_isSidebarVisible;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -34,56 +47,80 @@ class RegisterScreen extends StatelessWidget {
       body: SafeArea(
         child: Row(
           children: [
-            SizedBox(
-              width: sidebarWidth,
-              child: Container(
-                color: Colors.white,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
-                      child: TextButton(
-                        style: TextButton.styleFrom(
-                          padding: EdgeInsets.zero,
-                          foregroundColor: const Color(0xFF2C6E9E),
-                          textStyle: const TextStyle(
-                            fontWeight: FontWeight.w600,
+            if (_isSidebarVisible)
+              SizedBox(
+                width: sidebarWidth,
+                child: Container(
+                  color: Colors.white,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
+                        child: Row(
+                          children: [
+                            TextButton(
+                              style: TextButton.styleFrom(
+                                padding: EdgeInsets.zero,
+                                foregroundColor: const Color(0xFF2C6E9E),
+                                textStyle: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              onPressed: () {},
+                              child: const Text('Sign Out'),
+                            ),
+                            const Spacer(),
+                            Text(
+                              username,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF2D2D2D),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        child: Align(
+                          alignment: Alignment.centerRight,
+                          child: IconButton(
+                            tooltip: 'Hide sidebar',
+                            icon: const Icon(Icons.chevron_left),
+                            color: const Color(0xFF2C6E9E),
+                            onPressed: _toggleSidebar,
                           ),
                         ),
-                        onPressed: () {},
-                        child: const Text('Sign Out'),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    const Divider(height: 1),
-                    const SizedBox(height: 16),
-                    Expanded(
-                      child: ListView(
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        children: const [
-                          _SidebarItem(
-                            label: 'Register',
-                            isSelected: true,
-                          ),
-                          _SidebarItem(label: 'Transactions'),
-                          _SidebarItem(label: 'Manage Products'),
-                          Padding(
-                            padding: EdgeInsets.symmetric(vertical: 8),
-                            child: Divider(height: 1),
-                          ),
-                          _SidebarItem(label: 'Close Shift'),
-                          _SidebarItem(label: 'Sales Report'),
-                          _SidebarItem(label: 'Manual Entry'),
-                          _SidebarItem(label: 'Sync'),
-                          _SidebarItem(label: 'Settings'),
-                        ],
+                      const Divider(height: 1),
+                      const SizedBox(height: 8),
+                      Expanded(
+                        child: ListView(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          children: const [
+                            _SidebarItem(
+                              label: 'Register',
+                              isSelected: true,
+                            ),
+                            _SidebarItem(label: 'Transactions'),
+                            _SidebarItem(label: 'Manage Products'),
+                            Padding(
+                              padding: EdgeInsets.symmetric(vertical: 8),
+                              child: Divider(height: 1),
+                            ),
+                            _SidebarItem(label: 'Close Shift'),
+                            _SidebarItem(label: 'Sales Report'),
+                            _SidebarItem(label: 'Manual Entry'),
+                            _SidebarItem(label: 'Sync'),
+                            _SidebarItem(label: 'Settings'),
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
-            ),
             Expanded(
               child: Column(
                 children: [
@@ -92,19 +129,21 @@ class RegisterScreen extends StatelessWidget {
                         const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
                     child: Row(
                       children: [
+                        if (!_isSidebarVisible)
+                          Padding(
+                            padding: const EdgeInsets.only(right: 12),
+                            child: IconButton(
+                              tooltip: 'Show sidebar',
+                              icon: const Icon(Icons.menu),
+                              color: const Color(0xFF2C6E9E),
+                              onPressed: _toggleSidebar,
+                            ),
+                          ),
                         const Text(
                           'Register',
                           style: TextStyle(
                             fontSize: 22,
                             fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const Spacer(),
-                        Text(
-                          username,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFF2D2D2D),
                           ),
                         ),
                       ],
