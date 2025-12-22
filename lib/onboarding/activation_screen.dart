@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../api/api_client.dart';
+import '../api/api_exception.dart';
+
 class ActivationScreen extends StatefulWidget {
   const ActivationScreen({super.key, required this.onActivated});
 
@@ -14,7 +17,10 @@ class _ActivationScreenState extends State<ActivationScreen> {
   final TextEditingController _storeCodeController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  final ApiClient _apiClient = ApiClient();
   bool _isPasswordVisible = false;
+  bool _isSubmitting = false;
+  String? _errorMessage;
 
   @override
   void dispose() {
@@ -25,10 +31,54 @@ class _ActivationScreenState extends State<ActivationScreen> {
   }
 
   Future<void> _activate() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('has_completed_activation', true);
-    await prefs.setBool('is_authenticated', true);
-    widget.onActivated();
+    if (_isSubmitting) {
+      return;
+    }
+    final storeCode = _storeCodeController.text.trim();
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+    if (storeCode.isEmpty || email.isEmpty || password.isEmpty) {
+      setState(() {
+        _errorMessage = 'Please fill in the store code, email, and password.';
+      });
+      return;
+    }
+
+    setState(() {
+      _isSubmitting = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final response = await _apiClient.postJson(
+        '/omni_sales/api/v1/install/verify',
+        body: {
+          'warehouse_code': storeCode,
+          'email': email,
+          'password': password,
+        },
+      );
+      final authToken = response.data['auth_token'] ?? response.data['token'];
+      final staffId = response.data['staff_id'];
+      if (authToken == null || staffId == null) {
+        throw ApiException('Activation response missing token or staff id.');
+      }
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('auth_token', authToken.toString());
+      await prefs.setString('staff_id', staffId.toString());
+      await prefs.setBool('has_completed_activation', true);
+      widget.onActivated();
+    } catch (error) {
+      setState(() {
+        _errorMessage = 'Activation failed. Please check your details.';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSubmitting = false;
+        });
+      }
+    }
   }
 
   Widget _buildCard(BuildContext context) {
@@ -166,6 +216,17 @@ class _ActivationScreenState extends State<ActivationScreen> {
                 ],
               ),
               const SizedBox(height: 28),
+              if (_errorMessage != null) ...[
+                Text(
+                  _errorMessage!,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Colors.redAccent,
+                        fontWeight: FontWeight.w600,
+                      ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+              ],
               SizedBox(
                 width: double.infinity,
                 height: 56,
@@ -176,15 +237,25 @@ class _ActivationScreenState extends State<ActivationScreen> {
                       borderRadius: BorderRadius.circular(14),
                     ),
                   ),
-                  onPressed: _activate,
-                  child: const Text(
-                    'Continue',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                    ),
-                  ),
+                  onPressed: _isSubmitting ? null : _activate,
+                  child: _isSubmitting
+                      ? const SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.5,
+                            valueColor:
+                                AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        )
+                      : const Text(
+                          'Continue',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                          ),
+                        ),
                 ),
               ),
             ],

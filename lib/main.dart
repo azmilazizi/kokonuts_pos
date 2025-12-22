@@ -46,9 +46,13 @@ class _AppStartState extends State<AppStart> {
 
   Future<bool> _shouldShowActivation() async {
     final prefs = await SharedPreferences.getInstance();
-    final hasCompletedActivation =
-        prefs.getBool('has_completed_activation') ?? false;
-    return !hasCompletedActivation;
+    final authToken = prefs.getString('auth_token');
+    final staffId = prefs.getString('staff_id');
+    final hasStoredToken = authToken != null &&
+        authToken.isNotEmpty &&
+        staffId != null &&
+        staffId.isNotEmpty;
+    return !hasStoredToken;
   }
 
   void _handleActivated() {
