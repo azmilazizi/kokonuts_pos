@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'api/api_client.dart';
 import 'api/app_config.dart';
+import 'auth/auth_screen.dart';
 import 'onboarding/activation_screen.dart';
 
 void main() {
@@ -35,6 +36,7 @@ class AppStart extends StatefulWidget {
 
 class _AppStartState extends State<AppStart> {
   late Future<bool> _showActivationFuture;
+  bool _isAuthenticated = false;
 
   @override
   void initState() {
@@ -55,6 +57,12 @@ class _AppStartState extends State<AppStart> {
     });
   }
 
+  void _handleAuthenticated() {
+    setState(() {
+      _isAuthenticated = true;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<bool>(
@@ -70,6 +78,10 @@ class _AppStartState extends State<AppStart> {
 
         if (snapshot.data == true) {
           return ActivationScreen(onActivated: _handleActivated);
+        }
+
+        if (!_isAuthenticated) {
+          return AuthScreen(onAuthenticated: _handleAuthenticated);
         }
 
         return const RegisterScreen();
