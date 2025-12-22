@@ -104,17 +104,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
   void initState() {
     super.initState();
     _dateController.text = _formatDate(_selectedDate);
-    _paymentEntries.add(
-      _PaymentEntry(method: _paymentMethods.first),
-    );
+    _totalSalesController.addListener(_onPaymentEntriesChanged);
+    _paymentEntries.add(_createPaymentEntry());
     _refreshSyncStatus();
   }
 
   @override
   void dispose() {
     _dateController.dispose();
+    _totalSalesController.removeListener(_onPaymentEntriesChanged);
     _totalSalesController.dispose();
     for (final entry in _paymentEntries) {
+      entry.amountController.removeListener(_onPaymentEntriesChanged);
       entry.amountController.dispose();
     }
     super.dispose();
@@ -149,10 +150,46 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   void _addPaymentEntry() {
     setState(() {
-      _paymentEntries.add(
-        _PaymentEntry(method: _paymentMethods.first),
-      );
+      _paymentEntries.add(_createPaymentEntry());
     });
+  }
+
+  _PaymentEntry _createPaymentEntry() {
+    final entry = _PaymentEntry(method: _paymentMethods.first);
+    entry.amountController.addListener(_onPaymentEntriesChanged);
+    return entry;
+  }
+
+  void _onPaymentEntriesChanged() {
+    setState(() {});
+  }
+
+  double _parseAmount(String value) {
+    final normalized = value.replaceAll(',', '').trim();
+    return double.tryParse(normalized) ?? 0;
+  }
+
+  double get _totalSalesAmount {
+    return _parseAmount(_totalSalesController.text);
+  }
+
+  double get _paymentTotal {
+    return _paymentEntries.fold(
+      0,
+      (sum, entry) => sum + _parseAmount(entry.amountController.text),
+    );
+  }
+
+  double _remainingForIndex(int index) {
+    final previousTotal = _paymentEntries
+        .take(index)
+        .fold(0, (sum, entry) => sum + _parseAmount(entry.amountController.text));
+    final remaining = _totalSalesAmount - previousTotal;
+    return remaining > 0 ? remaining : 0;
+  }
+
+  String _formatCurrency(double amount) {
+    return amount.toStringAsFixed(2);
   }
 
   Widget _buildManualEntryContent() {
@@ -204,6 +241,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
             (entry) {
               final index = entry.key;
               final payment = entry.value;
+              final remaining = _remainingForIndex(index);
+              final hintText = _totalSalesAmount > 0
+                  ? _formatCurrency(remaining)
+                  : null;
               return Padding(
                 padding: const EdgeInsets.only(bottom: 12),
                 child: Row(
@@ -239,10 +280,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         controller: payment.amountController,
                         keyboardType:
                             const TextInputType.numberWithOptions(decimal: true),
-                        decoration: const InputDecoration(
+                        decoration: InputDecoration(
                           labelText: 'Amount',
+                          hintText: hintText,
                           prefixText: '\$ ',
-                          border: OutlineInputBorder(),
+                          border: const OutlineInputBorder(),
                         ),
                       ),
                     ),
@@ -258,6 +300,35 @@ class _RegisterScreenState extends State<RegisterScreen> {
               icon: const Icon(Icons.add),
               label: const Text('Add payment method'),
             ),
+          ),
+          const SizedBox(height: 12),
+          Builder(
+            builder: (context) {
+              final remaining = _totalSalesAmount - _paymentTotal;
+              final isComplete = remaining == 0 && _totalSalesAmount > 0;
+              final remainingLabel = remaining >= 0
+                  ? 'Remaining balance: \$ ${_formatCurrency(remaining)}'
+                  : 'Over by: \$ ${_formatCurrency(remaining.abs())}';
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    remainingLabel,
+                    style: TextStyle(
+                      color: isComplete
+                          ? const Color(0xFF2E7D32)
+                          : const Color(0xFFC62828),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  ElevatedButton(
+                    onPressed: isComplete ? () {} : null,
+                    child: const Text('Submit manual entry'),
+                  ),
+                ],
+              );
+            },
           ),
         ],
       ),
