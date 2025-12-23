@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-
 import '../api/api_client.dart';
 import '../api/api_exception.dart';
+import '../storage/secure_store.dart';
 
 class ActivationScreen extends StatefulWidget {
   const ActivationScreen({super.key, required this.onActivated});
@@ -18,6 +17,7 @@ class _ActivationScreenState extends State<ActivationScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final ApiClient _apiClient = ApiClient();
+  final SecureStore _secureStore = const SecureStore();
   bool _isPasswordVisible = false;
   bool _isSubmitting = false;
   String? _errorMessage;
@@ -58,15 +58,28 @@ class _ActivationScreenState extends State<ActivationScreen> {
           'password': password,
         },
       );
-      final authToken = response.data['auth_token'] ?? response.data['token'];
-      final staffId = response.data['staff_id'];
+      final responseData = response.data;
+      final responsePayload = responseData['data'] is Map<String, dynamic>
+          ? responseData['data'] as Map<String, dynamic>
+          : responseData;
+      final authToken =
+          responsePayload['auth_token'] ?? responsePayload['token'];
+      final staffId = responsePayload['staff_id'];
+      final boolStatus = [
+        responseData['success'],
+        responseData['status'],
+        responseData['result'],
+      ].whereType<bool>();
+      if (boolStatus.isNotEmpty && boolStatus.any((value) => value == false)) {
+        throw ApiException('Activation was rejected.');
+      }
       if (authToken == null || staffId == null) {
         throw ApiException('Activation response missing token or staff id.');
       }
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('auth_token', authToken.toString());
-      await prefs.setString('staff_id', staffId.toString());
-      await prefs.setBool('has_completed_activation', true);
+      await _secureStore.writeAuth(
+        token: authToken.toString(),
+        staffId: staffId.toString(),
+      );
       widget.onActivated();
     } catch (error) {
       setState(() {
