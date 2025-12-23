@@ -59,20 +59,26 @@ class _ActivationScreenState extends State<ActivationScreen> {
         },
       );
       final responseData = response.data;
+      final bool? activationResult = responseData is bool
+          ? responseData
+          : responseData['data'] is bool
+              ? responseData['data'] as bool
+              : responseData['result'] is bool
+                  ? responseData['result'] as bool
+                  : responseData['success'] is bool
+                      ? responseData['success'] as bool
+                      : responseData['status'] is bool
+                          ? responseData['status'] as bool
+                          : null;
+      if (activationResult != true) {
+        throw ApiException('Activation was rejected.');
+      }
       final responsePayload = responseData['data'] is Map<String, dynamic>
           ? responseData['data'] as Map<String, dynamic>
           : responseData;
       final authToken =
           responsePayload['auth_token'] ?? responsePayload['token'];
       final staffId = responsePayload['staff_id'];
-      final boolStatus = [
-        responseData['success'],
-        responseData['status'],
-        responseData['result'],
-      ].whereType<bool>();
-      if (boolStatus.isNotEmpty && boolStatus.any((value) => value == false)) {
-        throw ApiException('Activation was rejected.');
-      }
       if (authToken == null || staffId == null) {
         throw ApiException('Activation response missing token or staff id.');
       }
