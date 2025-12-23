@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import '../api/api_client.dart';
+import '../api/api_exception.dart';
+import '../storage/secure_store.dart';
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key, required this.onAuthenticated});
@@ -27,6 +30,10 @@ class _AuthScreenState extends State<AuthScreen>
   late final TabController _tabController;
   String _loginCode = '';
   String _clockCode = '';
+  bool _isSubmitting = false;
+  String? _errorMessage;
+  final ApiClient _apiClient = ApiClient();
+  final SecureStore _secureStore = const SecureStore();
 
   final List<_ClockedInStaff> _clockedInStaff = const [
     _ClockedInStaff('John Doe', '07/01/2025 02:37 PM'),
@@ -48,6 +55,9 @@ class _AuthScreenState extends State<AuthScreen>
   }
 
   void _handleDigit(String digit) {
+    if (_isSubmitting) {
+      return;
+    }
     setState(() {
       if (_tabController.index == 0) {
         if (_loginCode.length < _passcodeLength) {
@@ -68,6 +78,9 @@ class _AuthScreenState extends State<AuthScreen>
   }
 
   void _handleClear() {
+    if (_isSubmitting) {
+      return;
+    }
     setState(() {
       if (_tabController.index == 0) {
         _loginCode = '';
@@ -78,6 +91,9 @@ class _AuthScreenState extends State<AuthScreen>
   }
 
   void _handleBackspace() {
+    if (_isSubmitting) {
+      return;
+    }
     setState(() {
       if (_tabController.index == 0) {
         if (_loginCode.isNotEmpty) {
@@ -91,8 +107,53 @@ class _AuthScreenState extends State<AuthScreen>
     });
   }
 
-  void _submitLoginCode() {
-    widget.onAuthenticated();
+  Future<void> _submitLoginCode() async {
+    if (_isSubmitting) {
+      return;
+    }
+    setState(() {
+      _isSubmitting = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final email = await _secureStore.readActivationEmail();
+      if (email == null || email.isEmpty) {
+        throw ApiException('Activation email missing.');
+      }
+      final response = await _apiClient.postJson(
+        '/api/v1/auth/login',
+        body: {
+          'email': email,
+          'passcode': _loginCode,
+        },
+      );
+      final responsePayload = response.data['data'] is Map<String, dynamic>
+          ? response.data['data'] as Map<String, dynamic>
+          : response.data;
+      final authToken =
+          responsePayload['auth_token'] ?? responsePayload['token'];
+      final staffId =
+          responsePayload['staff_id'] ?? responsePayload['staffId'];
+      if (authToken != null && staffId != null) {
+        await _secureStore.writeAuth(
+          token: authToken.toString(),
+          staffId: staffId.toString(),
+        );
+      }
+      widget.onAuthenticated();
+    } catch (_) {
+      setState(() {
+        _errorMessage = 'Login failed. Please try again.';
+        _loginCode = '';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSubmitting = false;
+        });
+      }
+    }
   }
 
   void _submitClockCode() {
@@ -285,6 +346,17 @@ class _AuthScreenState extends State<AuthScreen>
                       );
                     },
                   ),
+                  if (_errorMessage != null) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      _errorMessage!,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Colors.redAccent,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),

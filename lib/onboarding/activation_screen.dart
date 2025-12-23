@@ -82,10 +82,16 @@ class _ActivationScreenState extends State<ActivationScreen> {
       if (authToken == null || staffId == null) {
         throw ApiException('Activation response missing token or staff id.');
       }
-      await _secureStore.writeAuth(
-        token: authToken.toString(),
-        staffId: staffId.toString(),
-      );
+      await Future.wait([
+        _secureStore.writeAuth(
+          token: authToken.toString(),
+          staffId: staffId.toString(),
+        ),
+        _secureStore.writeActivationDetails(
+          email: email,
+          warehouseCode: storeCode,
+        ),
+      ]);
       widget.onActivated();
     } catch (error) {
       setState(() {
