@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-
 import 'api/api_client.dart';
 import 'api/app_config.dart';
 import 'auth/auth_screen.dart';
 import 'onboarding/activation_screen.dart';
+import 'storage/secure_store.dart';
 
 void main() {
   runApp(const PosApp());
@@ -35,29 +34,51 @@ class AppStart extends StatefulWidget {
 }
 
 class _AppStartState extends State<AppStart> {
-  late Future<bool> _showActivationFuture;
+  late Future<_StartDecision> _startDecisionFuture;
   bool _isAuthenticated = false;
+  bool _hasShownReactivationNotice = false;
+  final ApiClient _apiClient = ApiClient();
+  final SecureStore _secureStore = const SecureStore();
 
   @override
   void initState() {
     super.initState();
-    _showActivationFuture = _shouldShowActivation();
+    _startDecisionFuture = _evaluateStart();
   }
 
-  Future<bool> _shouldShowActivation() async {
-    final prefs = await SharedPreferences.getInstance();
-    final authToken = prefs.getString('auth_token');
-    final staffId = prefs.getString('staff_id');
+  Future<_StartDecision> _evaluateStart() async {
+    final authToken = await _secureStore.readToken();
+    final staffId = await _secureStore.readStaffId();
     final hasStoredToken = authToken != null &&
         authToken.isNotEmpty &&
         staffId != null &&
         staffId.isNotEmpty;
-    return !hasStoredToken;
+    if (!hasStoredToken) {
+      return const _StartDecision(showActivation: true);
+    }
+
+    try {
+      final response =
+          await _apiClient.getJson('/api/v1/staff/token/$staffId');
+      final serverToken = response.data['auth_token'] ?? response.data['token'];
+      if (serverToken != null && serverToken.toString() == authToken) {
+        return const _StartDecision(showActivation: false);
+      }
+    } catch (_) {
+      // Ignore and fall through to reactivation flow.
+    }
+
+    await _secureStore.clearAuth();
+    return const _StartDecision(
+      showActivation: true,
+      showReactivationNotice: true,
+    );
   }
 
   void _handleActivated() {
     setState(() {
-      _showActivationFuture = Future.value(false);
+      _startDecisionFuture =
+          Future.value(const _StartDecision(showActivation: false));
     });
   }
 
@@ -69,8 +90,8 @@ class _AppStartState extends State<AppStart> {
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<bool>(
-      future: _showActivationFuture,
+    return FutureBuilder<_StartDecision>(
+      future: _startDecisionFuture,
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
           return const Scaffold(
@@ -80,7 +101,31 @@ class _AppStartState extends State<AppStart> {
           );
         }
 
-        if (snapshot.data == true) {
+        final decision = snapshot.data!;
+
+        if (decision.showReactivationNotice && !_hasShownReactivationNotice) {
+          _hasShownReactivationNotice = true;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            showDialog<void>(
+              context: context,
+              builder: (context) => AlertDialog(
+                title: const Text('Device activation required'),
+                content: const Text(
+                  'A new device has been activated. '
+                  'This device requires reactivation.',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('OK'),
+                  ),
+                ],
+              ),
+            );
+          });
+        }
+
+        if (decision.showActivation) {
           return ActivationScreen(onActivated: _handleActivated);
         }
 
@@ -92,6 +137,16 @@ class _AppStartState extends State<AppStart> {
       },
     );
   }
+}
+
+class _StartDecision {
+  const _StartDecision({
+    required this.showActivation,
+    this.showReactivationNotice = false,
+  });
+
+  final bool showActivation;
+  final bool showReactivationNotice;
 }
 
 class RegisterScreen extends StatefulWidget {
