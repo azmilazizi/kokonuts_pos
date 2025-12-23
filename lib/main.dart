@@ -5,6 +5,7 @@ import 'api/api_client.dart';
 import 'api/app_config.dart';
 import 'auth/auth_screen.dart';
 import 'onboarding/activation_screen.dart';
+import 'onboarding/splash_screen.dart';
 import 'storage/secure_store.dart';
 
 void main() {
@@ -39,8 +40,8 @@ class _AppStartState extends State<AppStart> with WidgetsBindingObserver {
   late Future<_StartDecision> _startDecisionFuture;
   bool _isAuthenticated = false;
   bool _hasShownReactivationNotice = false;
-  bool _isCheckingToken = false;
-  Timer? _tokenCheckTimer;
+  bool _isCheckingStatus = false;
+  Timer? _statusCheckTimer;
   final ApiClient _apiClient = ApiClient();
   final SecureStore _secureStore = const SecureStore();
 
@@ -49,38 +50,38 @@ class _AppStartState extends State<AppStart> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _startDecisionFuture = _evaluateStart();
-    _startTokenCheckTimer();
+    _startStatusCheckTimer();
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _tokenCheckTimer?.cancel();
+    _statusCheckTimer?.cancel();
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      _verifyTokenAndHandleReactivation();
+      _verifyStatusAndHandleReactivation();
     }
   }
 
   Future<_StartDecision> _evaluateStart() async {
-    final authToken = await _secureStore.readToken();
-    final staffId = await _secureStore.readStaffId();
-    final hasStoredToken = authToken != null &&
-        authToken.isNotEmpty &&
-        staffId != null &&
-        staffId.isNotEmpty;
-    if (!hasStoredToken) {
+    final activationEmail = await _secureStore.readActivationEmail();
+    final warehouseCode = await _secureStore.readWarehouseCode();
+    final hasActivationDetails = activationEmail != null &&
+        activationEmail.isNotEmpty &&
+        warehouseCode != null &&
+        warehouseCode.isNotEmpty;
+    if (!hasActivationDetails) {
       return const _StartDecision(showActivation: true);
     }
 
     try {
-      final isValid = await _checkTokenStatus(
-        staffId: staffId,
-        token: authToken,
+      final isValid = await _checkActivationStatus(
+        email: activationEmail,
+        warehouseCode: warehouseCode,
       );
       if (isValid) {
         return const _StartDecision(showActivation: false);
@@ -89,27 +90,52 @@ class _AppStartState extends State<AppStart> with WidgetsBindingObserver {
       // Ignore and fall through to reactivation flow.
     }
 
-    await _secureStore.clearAuth();
+    await Future.wait([
+      _secureStore.clearAuth(),
+      _secureStore.clearActivation(),
+    ]);
     return const _StartDecision(
       showActivation: true,
       showReactivationNotice: true,
     );
   }
 
-  void _startTokenCheckTimer() {
-    _tokenCheckTimer?.cancel();
-    _tokenCheckTimer = Timer.periodic(
+  void _startStatusCheckTimer() {
+    _statusCheckTimer?.cancel();
+    _statusCheckTimer = Timer.periodic(
       const Duration(minutes: 5),
-      (_) => _verifyTokenAndHandleReactivation(),
+      (_) => _verifyStatusAndHandleReactivation(),
     );
   }
 
-  Future<void> _verifyTokenAndHandleReactivation() async {
-    if (_isCheckingToken || !_isAuthenticated) {
+  Future<void> _verifyStatusAndHandleReactivation() async {
+    if (_isCheckingStatus) {
       return;
     }
-    _isCheckingToken = true;
+    _isCheckingStatus = true;
     try {
+      final activationEmail = await _secureStore.readActivationEmail();
+      final warehouseCode = await _secureStore.readWarehouseCode();
+      if (activationEmail == null ||
+          activationEmail.isEmpty ||
+          warehouseCode == null ||
+          warehouseCode.isEmpty) {
+        return;
+      }
+
+      final isActivationValid = await _checkActivationStatus(
+        email: activationEmail,
+        warehouseCode: warehouseCode,
+      );
+      if (!isActivationValid) {
+        await _handleReactivationRequired();
+        return;
+      }
+
+      if (!_isAuthenticated) {
+        return;
+      }
+
       final authToken = await _secureStore.readToken();
       final staffId = await _secureStore.readStaffId();
       if (authToken == null ||
@@ -118,15 +144,15 @@ class _AppStartState extends State<AppStart> with WidgetsBindingObserver {
           staffId.isEmpty) {
         return;
       }
-      final isValid = await _checkTokenStatus(
+      final isTokenValid = await _checkTokenStatus(
         staffId: staffId,
         token: authToken,
       );
-      if (!isValid) {
+      if (!isTokenValid) {
         await _handleReactivationRequired();
       }
     } finally {
-      _isCheckingToken = false;
+      _isCheckingStatus = false;
     }
   }
 
@@ -141,7 +167,24 @@ class _AppStartState extends State<AppStart> with WidgetsBindingObserver {
         'token': token,
       },
     );
-    final responseData = response.data;
+    return _parseBooleanResponse(response.data);
+  }
+
+  Future<bool> _checkActivationStatus({
+    required String email,
+    required String warehouseCode,
+  }) async {
+    final response = await _apiClient.postJson(
+      '/omni_sales/api/v1/install/cross_check',
+      body: {
+        'warehouse_code': warehouseCode,
+        'email': email,
+      },
+    );
+    return _parseBooleanResponse(response.data);
+  }
+
+  bool _parseBooleanResponse(Map<String, dynamic> responseData) {
     final dataPayload = responseData['data'];
     if (dataPayload is bool) {
       return dataPayload;
@@ -159,7 +202,10 @@ class _AppStartState extends State<AppStart> with WidgetsBindingObserver {
   }
 
   Future<void> _handleReactivationRequired() async {
-    await _secureStore.clearAuth();
+    await Future.wait([
+      _secureStore.clearAuth(),
+      _secureStore.clearActivation(),
+    ]);
     if (!mounted) {
       return;
     }
@@ -185,7 +231,7 @@ class _AppStartState extends State<AppStart> with WidgetsBindingObserver {
     setState(() {
       _isAuthenticated = true;
     });
-    _verifyTokenAndHandleReactivation();
+    _verifyStatusAndHandleReactivation();
   }
 
   @override
@@ -194,11 +240,7 @@ class _AppStartState extends State<AppStart> with WidgetsBindingObserver {
       future: _startDecisionFuture,
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
-          return const Scaffold(
-            body: Center(
-              child: CircularProgressIndicator(),
-            ),
-          );
+          return const SplashScreen();
         }
 
         final decision = snapshot.data!;
