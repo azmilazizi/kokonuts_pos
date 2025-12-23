@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'api/api_client.dart';
 import 'api/app_config.dart';
@@ -33,17 +35,35 @@ class AppStart extends StatefulWidget {
   State<AppStart> createState() => _AppStartState();
 }
 
-class _AppStartState extends State<AppStart> {
+class _AppStartState extends State<AppStart> with WidgetsBindingObserver {
   late Future<_StartDecision> _startDecisionFuture;
   bool _isAuthenticated = false;
   bool _hasShownReactivationNotice = false;
+  bool _isCheckingToken = false;
+  Timer? _tokenCheckTimer;
   final ApiClient _apiClient = ApiClient();
   final SecureStore _secureStore = const SecureStore();
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _startDecisionFuture = _evaluateStart();
+    _startTokenCheckTimer();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _tokenCheckTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _verifyTokenAndHandleReactivation();
+    }
   }
 
   Future<_StartDecision> _evaluateStart() async {
@@ -58,10 +78,11 @@ class _AppStartState extends State<AppStart> {
     }
 
     try {
-      final response =
-          await _apiClient.getJson('/api/v1/staff/token/$staffId');
-      final serverToken = response.data['auth_token'] ?? response.data['token'];
-      if (serverToken != null && serverToken.toString() == authToken) {
+      final isValid = await _checkTokenStatus(
+        staffId: staffId,
+        token: authToken,
+      );
+      if (isValid) {
         return const _StartDecision(showActivation: false);
       }
     } catch (_) {
@@ -75,6 +96,84 @@ class _AppStartState extends State<AppStart> {
     );
   }
 
+  void _startTokenCheckTimer() {
+    _tokenCheckTimer?.cancel();
+    _tokenCheckTimer = Timer.periodic(
+      const Duration(minutes: 5),
+      (_) => _verifyTokenAndHandleReactivation(),
+    );
+  }
+
+  Future<void> _verifyTokenAndHandleReactivation() async {
+    if (_isCheckingToken || !_isAuthenticated) {
+      return;
+    }
+    _isCheckingToken = true;
+    try {
+      final authToken = await _secureStore.readToken();
+      final staffId = await _secureStore.readStaffId();
+      if (authToken == null ||
+          authToken.isEmpty ||
+          staffId == null ||
+          staffId.isEmpty) {
+        return;
+      }
+      final isValid = await _checkTokenStatus(
+        staffId: staffId,
+        token: authToken,
+      );
+      if (!isValid) {
+        await _handleReactivationRequired();
+      }
+    } finally {
+      _isCheckingToken = false;
+    }
+  }
+
+  Future<bool> _checkTokenStatus({
+    required String staffId,
+    required String token,
+  }) async {
+    final response = await _apiClient.postJson(
+      '/timesheets/api/v1/check_token',
+      body: {
+        'staff_id': staffId,
+        'token': token,
+      },
+    );
+    final responseData = response.data;
+    final dataPayload = responseData['data'];
+    if (dataPayload is bool) {
+      return dataPayload;
+    }
+    if (responseData['result'] is bool) {
+      return responseData['result'] as bool;
+    }
+    if (responseData['success'] is bool) {
+      return responseData['success'] as bool;
+    }
+    if (responseData['status'] is bool) {
+      return responseData['status'] as bool;
+    }
+    return false;
+  }
+
+  Future<void> _handleReactivationRequired() async {
+    await _secureStore.clearAuth();
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _isAuthenticated = false;
+      _startDecisionFuture = Future.value(
+        const _StartDecision(
+          showActivation: true,
+          showReactivationNotice: true,
+        ),
+      );
+    });
+  }
+
   void _handleActivated() {
     setState(() {
       _startDecisionFuture =
@@ -86,6 +185,7 @@ class _AppStartState extends State<AppStart> {
     setState(() {
       _isAuthenticated = true;
     });
+    _verifyTokenAndHandleReactivation();
   }
 
   @override
