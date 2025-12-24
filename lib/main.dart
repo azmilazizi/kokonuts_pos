@@ -135,39 +135,9 @@ class _AppStartState extends State<AppStart> with WidgetsBindingObserver {
       if (!_isAuthenticated) {
         return;
       }
-
-      final authToken = await _secureStore.readToken();
-      final staffId = await _secureStore.readStaffId();
-      if (authToken == null ||
-          authToken.isEmpty ||
-          staffId == null ||
-          staffId.isEmpty) {
-        return;
-      }
-      final isTokenValid = await _checkTokenStatus(
-        staffId: staffId,
-        token: authToken,
-      );
-      if (!isTokenValid) {
-        await _handleReactivationRequired();
-      }
     } finally {
       _isCheckingStatus = false;
     }
-  }
-
-  Future<bool> _checkTokenStatus({
-    required String staffId,
-    required String token,
-  }) async {
-    final response = await _apiClient.postJson(
-      '/timesheets/api/v1/check_token',
-      body: {
-        'staff_id': staffId,
-        'token': token,
-      },
-    );
-    return _parseBooleanResponse(response.data);
   }
 
   Future<bool> _checkActivationStatus({
