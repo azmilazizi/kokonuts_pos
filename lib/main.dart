@@ -69,11 +69,11 @@ class _AppStartState extends State<AppStart> with WidgetsBindingObserver {
 
   Future<_StartDecision> _evaluateStart() async {
     final activationEmail = await _secureStore.readActivationEmail();
-    final warehouseCode = await _secureStore.readWarehouseCode();
+    final activationToken = await _secureStore.readToken();
     final hasActivationDetails = activationEmail != null &&
         activationEmail.isNotEmpty &&
-        warehouseCode != null &&
-        warehouseCode.isNotEmpty;
+        activationToken != null &&
+        activationToken.isNotEmpty;
     if (!hasActivationDetails) {
       return const _StartDecision(showActivation: true);
     }
@@ -81,7 +81,7 @@ class _AppStartState extends State<AppStart> with WidgetsBindingObserver {
     try {
       final isValid = await _checkActivationStatus(
         email: activationEmail,
-        warehouseCode: warehouseCode,
+        token: activationToken,
       );
       if (isValid) {
         return const _StartDecision(showActivation: false);
@@ -115,17 +115,17 @@ class _AppStartState extends State<AppStart> with WidgetsBindingObserver {
     _isCheckingStatus = true;
     try {
       final activationEmail = await _secureStore.readActivationEmail();
-      final warehouseCode = await _secureStore.readWarehouseCode();
+      final activationToken = await _secureStore.readToken();
       if (activationEmail == null ||
           activationEmail.isEmpty ||
-          warehouseCode == null ||
-          warehouseCode.isEmpty) {
+          activationToken == null ||
+          activationToken.isEmpty) {
         return;
       }
 
       final isActivationValid = await _checkActivationStatus(
         email: activationEmail,
-        warehouseCode: warehouseCode,
+        token: activationToken,
       );
       if (!isActivationValid) {
         await _handleReactivationRequired();
@@ -172,12 +172,12 @@ class _AppStartState extends State<AppStart> with WidgetsBindingObserver {
 
   Future<bool> _checkActivationStatus({
     required String email,
-    required String warehouseCode,
+    required String token,
   }) async {
     final response = await _apiClient.postJson(
       '/omni_sales/api/v1/install/cross_check',
       body: {
-        'warehouse_code': warehouseCode,
+        'token': token,
         'email': email,
       },
     );
