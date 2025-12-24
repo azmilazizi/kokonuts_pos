@@ -30,20 +30,6 @@ class _ActivationScreenState extends State<ActivationScreen> {
     super.dispose();
   }
 
-  bool? _extractActivationResult(Map<String, dynamic>? responseMap) {
-    if (responseMap == null) {
-      return null;
-    }
-    const keys = ['data', 'result', 'success', 'status'];
-    for (final key in keys) {
-      final value = responseMap[key];
-      if (value is bool) {
-        return value;
-      }
-    }
-    return null;
-  }
-
   Future<void> _activate() async {
     if (_isSubmitting) {
       return;
@@ -73,17 +59,23 @@ class _ActivationScreenState extends State<ActivationScreen> {
         },
       );
       final responseData = response.data;
-      final responseMap =
-          responseData is Map<String, dynamic> ? responseData : null;
       final bool? activationResult = responseData is bool
-          ? responseData
-          : _extractActivationResult(responseMap);
+          ? responseData as bool?
+          : responseData['data'] is bool
+          ? responseData['data'] as bool?
+          : responseData['result'] is bool
+          ? responseData['result'] as bool?
+          : responseData['success'] is bool
+          ? responseData['success'] as bool?
+          : responseData['status'] is bool
+          ? responseData['status'] as bool?
+          : null;
       if (activationResult != true) {
         throw ApiException('Activation was rejected.');
       }
-      final responsePayload = responseMap?['data'] is Map<String, dynamic>
-          ? responseMap?['data'] as Map<String, dynamic>
-          : responseMap ?? <String, dynamic>{};
+      final responsePayload = responseData['data'] is Map<String, dynamic>
+          ? responseData['data'] as Map<String, dynamic>
+          : responseData;
       final authToken =
           responsePayload['auth_token'] ?? responsePayload['token'];
       final staffId = responsePayload['staff_id'];
@@ -142,8 +134,8 @@ class _ActivationScreenState extends State<ActivationScreen> {
               Text(
                 'Activate your register',
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
+                  fontWeight: FontWeight.w600,
+                ),
               ),
               const SizedBox(height: 28),
               Align(
@@ -151,10 +143,10 @@ class _ActivationScreenState extends State<ActivationScreen> {
                 child: Text(
                   'STORE CODE',
                   style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                        color: const Color(0xFF6D6D6D),
-                        letterSpacing: 1.1,
-                        fontWeight: FontWeight.w600,
-                      ),
+                    color: const Color(0xFF6D6D6D),
+                    letterSpacing: 1.1,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
               const SizedBox(height: 8),
@@ -176,12 +168,12 @@ class _ActivationScreenState extends State<ActivationScreen> {
                       children: [
                         Text(
                           'EMAIL',
-                          style:
-                              Theme.of(context).textTheme.labelMedium?.copyWith(
-                                    color: const Color(0xFF6D6D6D),
-                                    letterSpacing: 1.1,
-                                    fontWeight: FontWeight.w600,
-                                  ),
+                          style: Theme.of(context).textTheme.labelMedium
+                              ?.copyWith(
+                                color: const Color(0xFF6D6D6D),
+                                letterSpacing: 1.1,
+                                fontWeight: FontWeight.w600,
+                              ),
                         ),
                         const SizedBox(height: 8),
                         TextField(
@@ -214,12 +206,12 @@ class _ActivationScreenState extends State<ActivationScreen> {
                       children: [
                         Text(
                           'PASSWORD',
-                          style:
-                              Theme.of(context).textTheme.labelMedium?.copyWith(
-                                    color: const Color(0xFF6D6D6D),
-                                    letterSpacing: 1.1,
-                                    fontWeight: FontWeight.w600,
-                                  ),
+                          style: Theme.of(context).textTheme.labelMedium
+                              ?.copyWith(
+                                color: const Color(0xFF6D6D6D),
+                                letterSpacing: 1.1,
+                                fontWeight: FontWeight.w600,
+                              ),
                         ),
                         const SizedBox(height: 8),
                         TextField(
@@ -253,9 +245,9 @@ class _ActivationScreenState extends State<ActivationScreen> {
                 Text(
                   _errorMessage!,
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Colors.redAccent,
-                        fontWeight: FontWeight.w600,
-                      ),
+                    color: Colors.redAccent,
+                    fontWeight: FontWeight.w600,
+                  ),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 16),
@@ -277,8 +269,9 @@ class _ActivationScreenState extends State<ActivationScreen> {
                           height: 24,
                           child: CircularProgressIndicator(
                             strokeWidth: 2.5,
-                            valueColor:
-                                AlwaysStoppedAnimation<Color>(Colors.white),
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Colors.white,
+                            ),
                           ),
                         )
                       : const Text(
@@ -306,10 +299,7 @@ class _ActivationScreenState extends State<ActivationScreen> {
         height: double.infinity,
         decoration: const BoxDecoration(
           gradient: LinearGradient(
-            colors: [
-              Color(0xFF2E2A25),
-              Color(0xFF1E1B18),
-            ],
+            colors: [Color(0xFF2E2A25), Color(0xFF1E1B18)],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
