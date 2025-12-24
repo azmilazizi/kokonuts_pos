@@ -75,19 +75,19 @@ class _ActivationScreenState extends State<ActivationScreen> {
       }
       final Map<String, dynamic> responsePayload =
           responseData['data'] is Map<String, dynamic>
-              ? responseData['data'] as Map<String, dynamic>
-              : responseData['result'] is Map<String, dynamic>
-                  ? responseData['result'] as Map<String, dynamic>
-                  : responseData;
+          ? responseData['data'] as Map<String, dynamic>
+          : responseData['result'] is Map<String, dynamic>
+          ? responseData['result'] as Map<String, dynamic>
+          : responseData;
       final Map<String, dynamic>? authentication =
           responsePayload['authentication'] is Map<String, dynamic>
-              ? responsePayload['authentication'] as Map<String, dynamic>
-              : null;
-      final Map<String, dynamic>? authHeaders =
-          authentication?['headers'] is Map<String, dynamic>
-              ? authentication?['headers'] as Map<String, dynamic>
-              : null;
-      final authToken = responsePayload['auth_token'] ??
+          ? responsePayload['authentication'] as Map<String, dynamic>
+          : null;
+      final Map<String, dynamic>? authHeaders = authentication != null
+          ? authentication['headers'] as Map<String, dynamic>?
+          : null;
+      final authToken =
+          responsePayload['auth_token'] ??
           responsePayload['token'] ??
           authentication?['token'] ??
           authentication?['authtoken'] ??
