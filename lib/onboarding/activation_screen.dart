@@ -75,10 +75,27 @@ class _ActivationScreenState extends State<ActivationScreen> {
       }
       final responsePayload = responseData['data'] is Map<String, dynamic>
           ? responseData['data'] as Map<String, dynamic>
-          : responseData;
-      final authToken =
-          responsePayload['auth_token'] ?? responsePayload['token'];
+          : responseData['result'] is Map<String, dynamic>
+              ? responseData['result'] as Map<String, dynamic>
+              : responseData;
+      final authentication = responsePayload['authentication']
+          is Map<String, dynamic>
+          ? responsePayload['authentication'] as Map<String, dynamic>
+          : null;
+      final authHeaders =
+          authentication?['headers'] is Map<String, dynamic>
+              ? authentication?['headers'] as Map<String, dynamic>
+              : null;
+      final authToken = responsePayload['auth_token'] ??
+          responsePayload['token'] ??
+          authentication?['token'] ??
+          authentication?['authtoken'] ??
+          authentication?['Authorization'] ??
+          authHeaders?['authtoken'] ??
+          authHeaders?['Authorization'];
       final staffId = responsePayload['staff_id'];
+      final warehouseCode =
+          responsePayload['warehouse_code'] ?? responsePayload['warehouseCode'];
       if (authToken == null || staffId == null) {
         throw ApiException('Activation response missing token or staff id.');
       }
@@ -89,7 +106,7 @@ class _ActivationScreenState extends State<ActivationScreen> {
         ),
         _secureStore.writeActivationDetails(
           email: email,
-          warehouseCode: storeCode,
+          warehouseCode: (warehouseCode ?? storeCode).toString(),
         ),
       ]);
       widget.onActivated();
