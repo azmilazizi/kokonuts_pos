@@ -22,49 +22,6 @@ class _ActivationScreenState extends State<ActivationScreen> {
   bool _isSubmitting = false;
   String? _errorMessage;
 
-  bool? _parseBool(dynamic value) {
-    if (value is bool) {
-      return value;
-    }
-    if (value is num) {
-      return value != 0;
-    }
-    if (value is String) {
-      final normalized = value.trim().toLowerCase();
-      if (['true', '1', 'yes'].contains(normalized)) {
-        return true;
-      }
-      if (['false', '0', 'no'].contains(normalized)) {
-        return false;
-      }
-    }
-    return null;
-  }
-
-  bool _extractActivationResult(Map<String, dynamic> responseData) {
-    final candidates = [
-      responseData['data'],
-      responseData['result'],
-      responseData['success'],
-      responseData['status'],
-    ];
-    for (final candidate in candidates) {
-      final parsed = _parseBool(candidate);
-      if (parsed != null) {
-        return parsed;
-      }
-      if (candidate is Map<String, dynamic>) {
-        for (final key in ['status', 'success', 'result', 'data']) {
-          final nestedParsed = _parseBool(candidate[key]);
-          if (nestedParsed != null) {
-            return nestedParsed;
-          }
-        }
-      }
-    }
-    return false;
-  }
-
   @override
   void dispose() {
     _storeCodeController.dispose();
@@ -102,7 +59,18 @@ class _ActivationScreenState extends State<ActivationScreen> {
         },
       );
       final responseData = response.data;
-      if (!_extractActivationResult(responseData)) {
+      final bool? activationResult = responseData is bool
+          ? responseData as bool?
+          : responseData['data'] is bool
+          ? responseData['data'] as bool?
+          : responseData['result'] is bool
+          ? responseData['result'] as bool?
+          : responseData['success'] is bool
+          ? responseData['success'] as bool?
+          : responseData['status'] is bool
+          ? responseData['status'] as bool?
+          : null;
+      if (activationResult != true) {
         throw ApiException('Activation was rejected.');
       }
       final Map<String, dynamic> responsePayload =
