@@ -30,6 +30,20 @@ class _ActivationScreenState extends State<ActivationScreen> {
     super.dispose();
   }
 
+  bool? _extractActivationResult(Map<String, dynamic>? responseMap) {
+    if (responseMap == null) {
+      return null;
+    }
+    const keys = ['data', 'result', 'success', 'status'];
+    for (final key in keys) {
+      final value = responseMap[key];
+      if (value is bool) {
+        return value;
+      }
+    }
+    return null;
+  }
+
   Future<void> _activate() async {
     if (_isSubmitting) {
       return;
@@ -59,23 +73,17 @@ class _ActivationScreenState extends State<ActivationScreen> {
         },
       );
       final responseData = response.data;
+      final responseMap =
+          responseData is Map<String, dynamic> ? responseData : null;
       final bool? activationResult = responseData is bool
           ? responseData
-          : responseData['data'] is bool
-              ? responseData['data'] as bool
-              : responseData['result'] is bool
-                  ? responseData['result'] as bool
-                  : responseData['success'] is bool
-                      ? responseData['success'] as bool
-                      : responseData['status'] is bool
-                          ? responseData['status'] as bool
-                          : null;
+          : _extractActivationResult(responseMap);
       if (activationResult != true) {
         throw ApiException('Activation was rejected.');
       }
-      final responsePayload = responseData['data'] is Map<String, dynamic>
-          ? responseData['data'] as Map<String, dynamic>
-          : responseData;
+      final responsePayload = responseMap?['data'] is Map<String, dynamic>
+          ? responseMap?['data'] as Map<String, dynamic>
+          : responseMap ?? <String, dynamic>{};
       final authToken =
           responsePayload['auth_token'] ?? responsePayload['token'];
       final staffId = responsePayload['staff_id'];
