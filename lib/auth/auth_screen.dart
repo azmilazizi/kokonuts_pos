@@ -234,12 +234,26 @@ class _AuthScreenState extends State<AuthScreen>
                         ],
                       );
                 return Center(
-                  child: SingleChildScrollView(
+                  child: Padding(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 24,
                       vertical: 32,
                     ),
-                    child: content,
+                    child: LayoutBuilder(
+                      builder: (context, innerConstraints) {
+                        return FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.topCenter,
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(
+                              maxWidth: isWide ? 920 : 520,
+                              maxHeight: innerConstraints.maxHeight,
+                            ),
+                            child: content,
+                          ),
+                        );
+                      },
+                    ),
                   ),
                 );
               },
@@ -520,16 +534,23 @@ class _Keypad extends StatelessWidget {
           );
           onTap = () => onDigitPressed(key);
         }
-        return InkWell(
-          onTap: onTap,
-          child: Container(
-            decoration: const BoxDecoration(
-              border: Border(
-                top: BorderSide(color: Color(0xFFE6E0DB)),
-                right: BorderSide(color: Color(0xFFE6E0DB)),
+        return Padding(
+          padding: const EdgeInsets.all(6),
+          child: Material(
+            color: Colors.transparent,
+            child: Ink(
+              decoration: BoxDecoration(
+                color: const Color(0xFFF7F4F2),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: InkWell(
+                onTap: onTap,
+                borderRadius: BorderRadius.circular(12),
+                splashColor: const Color(0xFFE67516).withOpacity(0.18),
+                highlightColor: const Color(0xFFE67516).withOpacity(0.1),
+                child: Center(child: child),
               ),
             ),
-            child: Center(child: child),
           ),
         );
       },
