@@ -156,13 +156,44 @@ class _AuthScreenState extends State<AuthScreen>
     }
   }
 
-  void _submitClockCode() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Clock in/out request submitted.'),
-      ),
-    );
-    _clockCode = '';
+  Future<void> _submitClockCode() async {
+    if (_isSubmitting) {
+      return;
+    }
+    setState(() {
+      _isSubmitting = true;
+      _errorMessage = null;
+    });
+
+    try {
+      await _apiClient.postJson(
+        '/timesheets/api/check_in_out_passcode',
+        body: {
+          'passcode': _clockCode,
+        },
+      );
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Clock in/out request submitted.'),
+        ),
+      );
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Clock in/out failed. Please try again.';
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSubmitting = false;
+          _clockCode = '';
+        });
+      }
+    }
   }
 
   @override
