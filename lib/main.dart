@@ -651,13 +651,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
           )
           .toList();
 
-      if (payments.isNotEmpty) {
-        await _apiClient.postJson(
-          '/api/v1/invoice_payment_records',
-          body: payments,
-          authToken: token,
-        );
-      }
+      await _apiClient.postJson(
+        '/api/v1/invoice_payment_records',
+        body: payments,
+        authToken: token,
+      );
 
       if (!mounted) {
         return;
