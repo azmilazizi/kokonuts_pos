@@ -271,124 +271,134 @@ class _AuthScreenState extends State<AuthScreen>
   Widget _buildAuthCard(BuildContext context) {
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 520),
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.15),
-              blurRadius: 24,
-              offset: const Offset(0, 12),
-            ),
-          ],
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              decoration: const BoxDecoration(
-                border: Border(
-                  bottom: BorderSide(color: Color(0xFFE6E0DB)),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          return Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.15),
+                  blurRadius: 24,
+                  offset: const Offset(0, 12),
                 ),
-              ),
-              child: TabBar(
-                controller: _tabController,
-                indicatorColor: const Color(0xFFE67516),
-                labelColor: const Color(0xFF1F1A16),
-                unselectedLabelColor: const Color(0xFF8E8681),
-                labelStyle: const TextStyle(
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.6,
-                ),
-                tabs: const [
-                  Tab(text: 'LOG IN'),
-                  Tab(text: 'CLOCK IN/OUT'),
-                ],
-              ),
+              ],
             ),
-            Padding(
-              padding: const EdgeInsets.all(28),
+            child: SizedBox(
+              height: constraints.maxHeight,
               child: Column(
+                mainAxisSize: MainAxisSize.max,
                 children: [
                   Container(
-                    width: 92,
-                    height: 92,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFE9EDF6),
-                      borderRadius: BorderRadius.circular(46),
+                    decoration: const BoxDecoration(
+                      border: Border(
+                        bottom: BorderSide(color: Color(0xFFE6E0DB)),
+                      ),
                     ),
-                    child: const Icon(
-                      Icons.lock,
-                      size: 48,
-                      color: Color(0xFF9AA5C9),
+                    child: TabBar(
+                      controller: _tabController,
+                      indicatorColor: const Color(0xFFE67516),
+                      labelColor: const Color(0xFF1F1A16),
+                      unselectedLabelColor: const Color(0xFF8E8681),
+                      labelStyle: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.6,
+                      ),
+                      tabs: const [
+                        Tab(text: 'LOG IN'),
+                        Tab(text: 'CLOCK IN/OUT'),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 20),
-                  AnimatedBuilder(
-                    animation: _tabController,
-                    builder: (context, child) {
-                      final isLogin = _tabController.index == 0;
-                      return Column(
-                        children: [
+                  Padding(
+                    padding: const EdgeInsets.all(28),
+                    child: Column(
+                      children: [
+                        Container(
+                          width: 92,
+                          height: 92,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE9EDF6),
+                            borderRadius: BorderRadius.circular(46),
+                          ),
+                          child: const Icon(
+                            Icons.lock,
+                            size: 48,
+                            color: Color(0xFF9AA5C9),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        AnimatedBuilder(
+                          animation: _tabController,
+                          builder: (context, child) {
+                            final isLogin = _tabController.index == 0;
+                            return Column(
+                              children: [
+                                Text(
+                                  isLogin ? 'Shift Closed' : 'Clock In / Out',
+                                  style: const TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  isLogin
+                                      ? 'Enter your manager passcode to continue.'
+                                      : 'Enter your staff code to clock in or out.',
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(
+                                    color: Color(0xFF7B7672),
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 18),
+                        AnimatedBuilder(
+                          animation: _tabController,
+                          builder: (context, child) {
+                            final code = _tabController.index == 0
+                                ? _loginCode
+                                : _clockCode;
+                            return _PasscodeDots(
+                              codeLength: code.length,
+                              totalDots: _passcodeLength,
+                            );
+                          },
+                        ),
+                        if (_errorMessage != null) ...[
+                          const SizedBox(height: 12),
                           Text(
-                            isLogin ? 'Shift Closed' : 'Clock In / Out',
+                            _errorMessage!,
+                            textAlign: TextAlign.center,
                             style: const TextStyle(
-                              fontSize: 20,
+                              color: Colors.redAccent,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
-                          const SizedBox(height: 8),
-                          Text(
-                            isLogin
-                                ? 'Enter your manager passcode to continue.'
-                                : 'Enter your staff code to clock in or out.',
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              color: Color(0xFF7B7672),
-                            ),
-                          ),
                         ],
-                      );
-                    },
+                      ],
+                    ),
                   ),
-                  const SizedBox(height: 18),
-                  AnimatedBuilder(
-                    animation: _tabController,
-                    builder: (context, child) {
-                      final code =
-                          _tabController.index == 0 ? _loginCode : _clockCode;
-                      return _PasscodeDots(
-                        codeLength: code.length,
-                        totalDots: _passcodeLength,
-                      );
-                    },
-                  ),
-                  if (_errorMessage != null) ...[
-                    const SizedBox(height: 12),
-                    Text(
-                      _errorMessage!,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: Colors.redAccent,
-                        fontWeight: FontWeight.w600,
+                  const Divider(height: 1, color: Color(0xFFE6E0DB)),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
+                      child: _Keypad(
+                        onDigitPressed: _handleDigit,
+                        onClear: _handleClear,
+                        onBackspace: _handleBackspace,
                       ),
                     ),
-                  ],
+                  ),
                 ],
               ),
             ),
-            const Divider(height: 1, color: Color(0xFFE6E0DB)),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: _Keypad(
-                onDigitPressed: _handleDigit,
-                onClear: _handleClear,
-                onBackspace: _handleBackspace,
-              ),
-            ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
@@ -507,69 +517,63 @@ class _Keypad extends StatelessWidget {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final targetHeight = (constraints.maxWidth / 3) * 4;
-        final height = (constraints.hasBoundedHeight
-                ? targetHeight.clamp(0, constraints.maxHeight)
-                : targetHeight)
-            .toDouble();
+        final keyWidth = constraints.maxWidth / 3;
+        final keyHeight = constraints.maxHeight / 4;
         final childAspectRatio =
-            (constraints.maxWidth / 3) / ((height == 0 ? 1 : height) / 4);
-        return SizedBox(
-          height: height,
-          child: GridView.builder(
-            physics: const NeverScrollableScrollPhysics(),
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 3,
-              childAspectRatio: childAspectRatio,
-            ),
-            itemCount: keys.length,
-            itemBuilder: (context, index) {
-              final key = keys[index];
-              Widget child;
-              VoidCallback? onTap;
-              if (key == 'clear') {
-                child =
-                    const Icon(Icons.close, size: 26, color: Color(0xFF7C7773));
-                onTap = onClear;
-              } else if (key == 'back') {
-                child = const Icon(
-                  Icons.backspace_outlined,
-                  size: 24,
-                  color: Color(0xFF7C7773),
-                );
-                onTap = onBackspace;
-              } else {
-                child = Text(
-                  key,
-                  style: const TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF2D2A28),
-                  ),
-                );
-                onTap = () => onDigitPressed(key);
-              }
-              return Padding(
-                padding: const EdgeInsets.all(6),
-                child: Material(
-                  color: Colors.transparent,
-                  child: Ink(
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF7F4F2),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: InkWell(
-                      onTap: onTap,
-                      borderRadius: BorderRadius.circular(12),
-                      splashColor: const Color(0xFFE67516).withOpacity(0.18),
-                      highlightColor: const Color(0xFFE67516).withOpacity(0.1),
-                      child: Center(child: child),
-                    ),
-                  ),
+            keyWidth / (keyHeight == 0 ? keyWidth : keyHeight);
+        return GridView.builder(
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 3,
+            childAspectRatio: childAspectRatio,
+          ),
+          itemCount: keys.length,
+          itemBuilder: (context, index) {
+            final key = keys[index];
+            Widget child;
+            VoidCallback? onTap;
+            if (key == 'clear') {
+              child =
+                  const Icon(Icons.close, size: 26, color: Color(0xFF7C7773));
+              onTap = onClear;
+            } else if (key == 'back') {
+              child = const Icon(
+                Icons.backspace_outlined,
+                size: 24,
+                color: Color(0xFF7C7773),
+              );
+              onTap = onBackspace;
+            } else {
+              child = Text(
+                key,
+                style: const TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF2D2A28),
                 ),
               );
-            },
-          ),
+              onTap = () => onDigitPressed(key);
+            }
+            return Padding(
+              padding: const EdgeInsets.all(6),
+              child: Material(
+                color: Colors.transparent,
+                child: Ink(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF7F4F2),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: InkWell(
+                    onTap: onTap,
+                    borderRadius: BorderRadius.circular(12),
+                    splashColor: const Color(0xFFE67516).withOpacity(0.18),
+                    highlightColor: const Color(0xFFE67516).withOpacity(0.1),
+                    child: Center(child: child),
+                  ),
+                ),
+              ),
+            );
+          },
         );
       },
     );
