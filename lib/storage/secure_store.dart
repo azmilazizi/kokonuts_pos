@@ -8,6 +8,7 @@ class SecureStore {
   static const String _staffIdKey = 'staff_id';
   static const String _activationEmailKey = 'activation_email';
   static const String _warehouseCodeKey = 'warehouse_code';
+  static const String _warehouseIdKey = 'warehouse_id';
 
   final FlutterSecureStorage _storage;
 
@@ -27,6 +28,10 @@ class SecureStore {
     return _storage.read(key: _warehouseCodeKey);
   }
 
+  Future<String?> readWarehouseId() {
+    return _storage.read(key: _warehouseIdKey);
+  }
+
   Future<void> writeAuth({
     required String token,
     required String staffId,
@@ -40,10 +45,13 @@ class SecureStore {
   Future<void> writeActivationDetails({
     required String email,
     required String warehouseCode,
+    String? warehouseId,
   }) {
     return Future.wait([
       _storage.write(key: _activationEmailKey, value: email),
       _storage.write(key: _warehouseCodeKey, value: warehouseCode),
+      if (warehouseId != null)
+        _storage.write(key: _warehouseIdKey, value: warehouseId),
     ]);
   }
 
@@ -58,6 +66,7 @@ class SecureStore {
     return Future.wait([
       _storage.delete(key: _activationEmailKey),
       _storage.delete(key: _warehouseCodeKey),
+      _storage.delete(key: _warehouseIdKey),
     ]);
   }
 }

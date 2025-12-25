@@ -129,6 +129,8 @@ class _ActivationScreenState extends State<ActivationScreen> {
       final staffId = responsePayload['staff_id'];
       final warehouseCode =
           responsePayload['warehouse_code'] ?? responsePayload['warehouseCode'];
+      final warehouseId =
+          responsePayload['warehouse_id'] ?? responsePayload['warehouseId'];
       if (authToken == null || staffId == null) {
         throw ApiException('Activation response missing token or staff id.');
       }
@@ -140,6 +142,7 @@ class _ActivationScreenState extends State<ActivationScreen> {
         _secureStore.writeActivationDetails(
           email: email,
           warehouseCode: (warehouseCode ?? storeCode).toString(),
+          warehouseId: warehouseId?.toString(),
         ),
       ]);
       widget.onActivated();
