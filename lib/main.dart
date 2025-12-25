@@ -602,16 +602,25 @@ class _RegisterScreenState extends State<RegisterScreen> {
           ),
           child: Row(
             children: [
-              if (!_isSidebarVisible)
-                Padding(
-                  padding: const EdgeInsets.only(right: 12),
-                  child: IconButton(
-                    tooltip: 'Show sidebar',
-                    icon: const Icon(Icons.menu),
-                    color: const Color(0xFF2C6E9E),
-                    onPressed: _toggleSidebar,
+              Padding(
+                padding: const EdgeInsets.only(right: 12),
+                child: SizedBox(
+                  height: 48,
+                  width: 48,
+                  child: IgnorePointer(
+                    ignoring: _isSidebarVisible,
+                    child: Opacity(
+                      opacity: _isSidebarVisible ? 0 : 1,
+                      child: IconButton(
+                        tooltip: 'Show sidebar',
+                        icon: const Icon(Icons.menu),
+                        color: const Color(0xFF2C6E9E),
+                        onPressed: _toggleSidebar,
+                      ),
+                    ),
                   ),
                 ),
+              ),
               Text(
                 destination.label,
                 style: const TextStyle(
