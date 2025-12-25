@@ -20,21 +20,22 @@ class ApiClient {
 
   Future<ApiResponse> getJson(String path,
       {Map<String, String>? queryParameters,
-      Map<String, String>? headers}) async {
+      Map<String, String>? headers,
+      String? authToken}) async {
     final uri = buildUri(path, queryParameters);
     final response = await _client
-        .get(uri, headers: _defaultHeaders(headers))
+        .get(uri, headers: _defaultHeaders(headers, authToken: authToken))
         .timeout(AppConfig.requestTimeout);
     return _decodeResponse(response);
   }
 
   Future<ApiResponse> postJson(String path,
-      {Object? body, Map<String, String>? headers}) async {
+      {Object? body, Map<String, String>? headers, String? authToken}) async {
     final uri = buildUri(path);
     final response = await _client
         .post(
           uri,
-          headers: _defaultHeaders(headers),
+          headers: _defaultHeaders(headers, authToken: authToken),
           body: body == null ? null : jsonEncode(body),
         )
         .timeout(AppConfig.requestTimeout);
@@ -56,10 +57,14 @@ class ApiClient {
     }
   }
 
-  Map<String, String> _defaultHeaders(Map<String, String>? headers) {
+  Map<String, String> _defaultHeaders(
+    Map<String, String>? headers, {
+    String? authToken,
+  }) {
     return {
       'Accept': 'application/json',
       'Content-Type': 'application/json',
+      if (authToken != null && authToken.isNotEmpty) 'authtoken': authToken,
       if (headers != null) ...headers,
     };
   }
