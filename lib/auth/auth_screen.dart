@@ -240,22 +240,19 @@ class _AuthScreenState extends State<AuthScreen>
                   ),
                   child: LayoutBuilder(
                     builder: (context, innerConstraints) {
-                      return SingleChildScrollView(
-                        child: ConstrainedBox(
-                          constraints: BoxConstraints(
-                            minHeight: innerConstraints.maxHeight,
-                          ),
-                          child: Center(
-                            child: FittedBox(
-                              fit: BoxFit.scaleDown,
-                              alignment: Alignment.topCenter,
-                              child: ConstrainedBox(
-                                constraints: BoxConstraints(
-                                  maxWidth: isWide ? 920 : 520,
-                                  maxHeight: innerConstraints.maxHeight,
-                                ),
-                                child: content,
+                      return SizedBox(
+                        height: innerConstraints.maxHeight,
+                        width: innerConstraints.maxWidth,
+                        child: Center(
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.center,
+                            child: ConstrainedBox(
+                              constraints: BoxConstraints(
+                                maxWidth: isWide ? 920 : 520,
+                                maxHeight: innerConstraints.maxHeight,
                               ),
+                              child: content,
                             ),
                           ),
                         ),
