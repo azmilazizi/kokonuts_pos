@@ -20,6 +20,7 @@ class PosApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Kokonuts POS',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF2C6E9E)),
         useMaterial3: true,
@@ -430,6 +431,25 @@ class _RegisterScreenState extends State<RegisterScreen> {
     });
   }
 
+  void _resetManualEntryForm() {
+    final now = DateTime.now();
+    for (final entry in _paymentEntries) {
+      entry.amountController.removeListener(_onPaymentEntriesChanged);
+      entry.amountController.dispose();
+      entry.discountController.removeListener(_onPaymentEntriesChanged);
+      entry.discountController.dispose();
+    }
+    setState(() {
+      _selectedDate = now;
+      _dateController.text = _formatDate(now);
+      _totalSalesController.text = '0.00';
+      _manualEntryError = null;
+      _paymentEntries
+        ..clear()
+        ..add(_createPaymentEntry());
+    });
+  }
+
   _PaymentEntry _createPaymentEntry() {
     final entry = _PaymentEntry(
       paymentModeId: _paymentModes.isNotEmpty ? _paymentModes.first.id : null,
@@ -661,6 +681,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       if (!mounted) {
         return;
       }
+      _resetManualEntryForm();
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Manual entry submitted.')));
