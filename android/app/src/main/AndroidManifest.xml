@@ -1,6 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application
-        android:label="kokonuts_pos"
+        android:label="POS Kokonuts"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
