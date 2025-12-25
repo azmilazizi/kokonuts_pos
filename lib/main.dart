@@ -637,6 +637,28 @@ class _RegisterScreenState extends State<RegisterScreen> {
         throw Exception('Invoice ID missing.');
       }
 
+      final payments = _paymentEntries
+          .where((entry) => _parseAmount(entry.amountController.text) > 0)
+          .where((entry) => entry.paymentModeId != null)
+          .map(
+            (entry) => {
+              'invoiceid': invoiceIdValue,
+              'amount': _parseAmount(entry.amountController.text),
+              'paymentmode': _normalizeId(entry.paymentModeId!),
+              'date': dateCreated,
+              'daterecorded': dateCreated,
+            },
+          )
+          .toList();
+
+      if (payments.isNotEmpty) {
+        await _apiClient.postJson(
+          '/api/v1/invoice_payment_records',
+          body: payments,
+          authToken: token,
+        );
+      }
+
       if (!mounted) {
         return;
       }
