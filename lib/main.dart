@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'api/api_client.dart';
 import 'api/app_config.dart';
 import 'auth/auth_screen.dart';
@@ -289,6 +290,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final List<_PaymentEntry> _paymentEntries = [];
   final ApiClient _apiClient = ApiClient();
   final SecureStore _secureStore = const SecureStore();
+  final TextInputFormatter _currencyFormatter = _CurrencyTextInputFormatter();
   DateTime _selectedDate = DateTime.now();
   ApiStatus? _syncStatus;
   bool _isSyncLoading = false;
@@ -628,33 +630,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
       );
 
       final invoicePayload = invoiceResponse.data['data'];
-      final invoiceId = invoicePayload is Map<String, dynamic>
+      final invoiceIdValue = invoicePayload is Map<String, dynamic>
           ? invoicePayload['id']?.toString()
           : invoiceResponse.data['id']?.toString();
-      if (invoiceId == null || invoiceId.isEmpty) {
+      if (invoiceIdValue == null || invoiceIdValue.isEmpty) {
         throw Exception('Invoice ID missing.');
-      }
-
-      final payments = _paymentEntries
-          .where((entry) => _parseAmount(entry.amountController.text) > 0)
-          .where((entry) => entry.paymentModeId != null)
-          .map(
-            (entry) => {
-              'invoiceid': invoiceId,
-              'amount': _parseAmount(entry.amountController.text),
-              'paymentmode': _normalizeId(entry.paymentModeId!),
-              'date': dateCreated,
-              'daterecorded': dateCreated,
-            },
-          )
-          .toList();
-
-      if (payments.isNotEmpty) {
-        await _apiClient.postJson(
-          '/api/v1/invoice_payment_records',
-          body: payments,
-          authToken: token,
-        );
       }
 
       if (!mounted) {
@@ -711,9 +691,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
           TextField(
             controller: _totalSalesController,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            textAlign: TextAlign.end,
+            inputFormatters: [_currencyFormatter],
             decoration: const InputDecoration(
               labelText: 'Total Sales',
-              prefixText: '\$ ',
+              prefixText: 'RM ',
               prefixIcon: Icon(Icons.attach_money),
               border: OutlineInputBorder(),
             ),
@@ -739,11 +721,28 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     Expanded(
                       child: DropdownButtonFormField<String>(
                         value: payment.paymentModeId,
+                        isExpanded: true,
                         items: _paymentModes
                             .map(
                               (mode) => DropdownMenuItem<String>(
                                 value: mode.id,
-                                child: Text(mode.name),
+                                child: Text(
+                                  mode.name,
+                                  overflow: TextOverflow.fade,
+                                  softWrap: false,
+                                ),
+                              ),
+                            )
+                            .toList(),
+                        selectedItemBuilder: (context) => _paymentModes
+                            .map(
+                              (mode) => Align(
+                                alignment: Alignment.centerLeft,
+                                child: Text(
+                                  mode.name,
+                                  overflow: TextOverflow.fade,
+                                  softWrap: false,
+                                ),
                               ),
                             )
                             .toList(),
@@ -769,10 +768,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         controller: payment.amountController,
                         keyboardType:
                             const TextInputType.numberWithOptions(decimal: true),
+                        textAlign: TextAlign.end,
+                        inputFormatters: [_currencyFormatter],
                         decoration: InputDecoration(
                           labelText: 'Amount',
                           hintText: hintText,
-                          prefixText: '\$ ',
+                          prefixText: 'RM ',
                           border: const OutlineInputBorder(),
                         ),
                       ),
@@ -783,9 +784,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         controller: payment.discountController,
                         keyboardType:
                             const TextInputType.numberWithOptions(decimal: true),
+                        textAlign: TextAlign.end,
+                        inputFormatters: [_currencyFormatter],
                         decoration: const InputDecoration(
                           labelText: 'Discount',
-                          prefixText: '\$ ',
+                          prefixText: 'RM ',
                           border: OutlineInputBorder(),
                         ),
                       ),
@@ -811,8 +814,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   _totalSalesAmount > 0 &&
                   _hasValidPaymentModes;
               final remainingLabel = remaining >= 0
-                  ? 'Remaining balance: \$ ${_formatCurrency(remaining)}'
-                  : 'Over by: \$ ${_formatCurrency(remaining.abs())}';
+                  ? 'Remaining balance: RM ${_formatCurrency(remaining)}'
+                  : 'Over by: RM ${_formatCurrency(remaining.abs())}';
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -1302,6 +1305,22 @@ class _SidebarDestination {
   final String label;
   final IconData icon;
   final String description;
+}
+
+class _CurrencyTextInputFormatter extends TextInputFormatter {
+  static final RegExp _currencyRegex = RegExp(r'^\d*\.?\d{0,2}$');
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final text = newValue.text;
+    if (text.isEmpty || _currencyRegex.hasMatch(text)) {
+      return newValue;
+    }
+    return oldValue;
+  }
 }
 
 class _PaymentEntry {
