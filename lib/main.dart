@@ -532,13 +532,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
     }
   }
 
-  List<dynamic> _extractList(Map<String, dynamic> payload) {
-    final data = payload['data'] ?? payload['result'] ?? payload['items'];
-    if (data is List) {
-      return data;
-    }
+  List<dynamic> _extractList(dynamic payload) {
     if (payload is List) {
       return payload;
+    }
+    if (payload is Map<String, dynamic>) {
+      final data = payload['data'] ?? payload['result'] ?? payload['items'];
+      if (data is List) {
+        return data;
+      }
     }
     return const [];
   }
