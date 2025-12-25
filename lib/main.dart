@@ -204,6 +204,16 @@ class _AppStartState extends State<AppStart> with WidgetsBindingObserver {
     _verifyStatusAndHandleReactivation();
   }
 
+  Future<void> _handleSignOut() async {
+    await _secureStore.clearAuth();
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _isAuthenticated = false;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<_StartDecision>(
@@ -245,7 +255,7 @@ class _AppStartState extends State<AppStart> with WidgetsBindingObserver {
           return AuthScreen(onAuthenticated: _handleAuthenticated);
         }
 
-        return const RegisterScreen();
+        return RegisterScreen(onSignOut: _handleSignOut);
       },
     );
   }
@@ -262,7 +272,9 @@ class _StartDecision {
 }
 
 class RegisterScreen extends StatefulWidget {
-  const RegisterScreen({super.key});
+  const RegisterScreen({super.key, required this.onSignOut});
+
+  final Future<void> Function() onSignOut;
 
   @override
   State<RegisterScreen> createState() => _RegisterScreenState();
@@ -278,6 +290,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   DateTime _selectedDate = DateTime.now();
   ApiStatus? _syncStatus;
   bool _isSyncLoading = false;
+  bool _isSigningOut = false;
 
   static const List<String> _paymentMethods = [
     'Cash',
@@ -335,6 +348,25 @@ class _RegisterScreenState extends State<RegisterScreen> {
     setState(() {
       _isSidebarVisible = !_isSidebarVisible;
     });
+  }
+
+  Future<void> _signOut() async {
+    if (_isSigningOut) {
+      return;
+    }
+    setState(() {
+      _isSigningOut = true;
+    });
+    try {
+      await widget.onSignOut();
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSigningOut = false;
+          _isSidebarVisible = false;
+        });
+      }
+    }
   }
 
   @override
@@ -731,7 +763,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
-                              onPressed: () {},
+                              onPressed: _isSigningOut ? null : _signOut,
                               child: const Text('Sign Out'),
                             ),
                             const Spacer(),
