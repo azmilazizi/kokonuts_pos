@@ -375,6 +375,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   void initState() {
     super.initState();
     _dateController.text = _formatDate(_selectedDate);
+    _totalSalesController.text = '0.00';
     _totalSalesController.addListener(_onPaymentEntriesChanged);
     _paymentEntries.add(_createPaymentEntry());
     _refreshSyncStatus();
@@ -433,6 +434,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
     final entry = _PaymentEntry(
       paymentModeId: _paymentModes.isNotEmpty ? _paymentModes.first.id : null,
     );
+    entry.amountController.text = '0.00';
+    entry.discountController.text = '0.00';
     entry.amountController.addListener(_onPaymentEntriesChanged);
     entry.discountController.addListener(_onPaymentEntriesChanged);
     return entry;
@@ -705,13 +708,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
           const SizedBox(height: 20),
           TextField(
             controller: _totalSalesController,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            textAlign: TextAlign.end,
+            keyboardType: TextInputType.number,
+            textAlign: TextAlign.start,
             inputFormatters: [_currencyFormatter],
             decoration: const InputDecoration(
               labelText: 'Total Sales',
-              prefixText: 'RM ',
-              prefixIcon: Icon(Icons.attach_money),
+              prefixIcon: Icon(Icons.payments),
               border: OutlineInputBorder(),
             ),
           ),
@@ -780,15 +782,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   Expanded(
                     child: TextField(
                       controller: payment.amountController,
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                      textAlign: TextAlign.end,
+                      keyboardType: TextInputType.number,
+                      textAlign: TextAlign.start,
                       inputFormatters: [_currencyFormatter],
                       decoration: InputDecoration(
                         labelText: 'Amount',
                         hintText: hintText,
-                        prefixText: 'RM ',
+                        prefixIcon: const Icon(Icons.payments),
                         border: const OutlineInputBorder(),
                       ),
                     ),
@@ -797,14 +797,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   Expanded(
                     child: TextField(
                       controller: payment.discountController,
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                      textAlign: TextAlign.end,
+                      keyboardType: TextInputType.number,
+                      textAlign: TextAlign.start,
                       inputFormatters: [_currencyFormatter],
                       decoration: const InputDecoration(
                         labelText: 'Discount',
-                        prefixText: 'RM ',
+                        prefixIcon: Icon(Icons.payments),
                         border: OutlineInputBorder(),
                       ),
                     ),
@@ -855,17 +853,20 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     ),
                   ],
                   const SizedBox(height: 12),
-                  ElevatedButton(
-                    onPressed: isComplete && !_isSubmittingManualEntry
-                        ? _submitManualEntry
-                        : null,
-                    child: _isSubmittingManualEntry
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Text('Submit manual entry'),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: ElevatedButton(
+                      onPressed: isComplete && !_isSubmittingManualEntry
+                          ? _submitManualEntry
+                          : null,
+                      child: _isSubmittingManualEntry
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Text('Submit manual entry'),
+                    ),
                   ),
                 ],
               );
@@ -935,7 +936,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         Expanded(
           child: Center(
             child: Container(
-              width: 520,
+              width: 640,
               padding: const EdgeInsets.all(32),
               decoration: BoxDecoration(
                 color: Colors.white,
@@ -1116,7 +1117,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   Widget _buildDestinationCard(_SidebarDestination destination) {
     return Container(
-      width: 520,
+      width: 640,
       padding: const EdgeInsets.all(32),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -1288,18 +1289,26 @@ class _SidebarDestination {
 }
 
 class _CurrencyTextInputFormatter extends TextInputFormatter {
-  static final RegExp _currencyRegex = RegExp(r'^\d*\.?\d{0,2}$');
-
   @override
   TextEditingValue formatEditUpdate(
     TextEditingValue oldValue,
     TextEditingValue newValue,
   ) {
-    final text = newValue.text;
-    if (text.isEmpty || _currencyRegex.hasMatch(text)) {
-      return newValue;
+    final digits = newValue.text.replaceAll(RegExp(r'[^0-9]'), '');
+    if (digits.isEmpty) {
+      const value = '0.00';
+      return const TextEditingValue(
+        text: value,
+        selection: TextSelection.collapsed(offset: value.length),
+      );
     }
-    return oldValue;
+
+    final cents = int.parse(digits);
+    final value = (cents / 100).toStringAsFixed(2);
+    return TextEditingValue(
+      text: value,
+      selection: TextSelection.collapsed(offset: value.length),
+    );
   }
 }
 
