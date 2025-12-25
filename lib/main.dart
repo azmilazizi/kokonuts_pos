@@ -71,7 +71,8 @@ class _AppStartState extends State<AppStart> with WidgetsBindingObserver {
   Future<_StartDecision> _evaluateStart() async {
     final activationEmail = await _secureStore.readActivationEmail();
     final activationToken = await _secureStore.readToken();
-    final hasActivationDetails = activationEmail != null &&
+    final hasActivationDetails =
+        activationEmail != null &&
         activationEmail.isNotEmpty &&
         activationToken != null &&
         activationToken.isNotEmpty;
@@ -147,10 +148,7 @@ class _AppStartState extends State<AppStart> with WidgetsBindingObserver {
   }) async {
     final response = await _apiClient.postJson(
       '/omni_sales/api/v1/install/cross_check',
-      body: {
-        'token': token,
-        'email': email,
-      },
+      body: {'token': token, 'email': email},
       authToken: token,
     );
     return _parseBooleanResponse(response.data);
@@ -194,8 +192,9 @@ class _AppStartState extends State<AppStart> with WidgetsBindingObserver {
 
   void _handleActivated() {
     setState(() {
-      _startDecisionFuture =
-          Future.value(const _StartDecision(showActivation: false));
+      _startDecisionFuture = Future.value(
+        const _StartDecision(showActivation: false),
+      );
     });
   }
 
@@ -306,7 +305,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
     _SidebarDestination(
       label: 'Register',
       icon: Icons.point_of_sale,
-      description: 'We are building the Register experience. '
+      description:
+          'We are building the Register experience. '
           'Please check back soon.',
     ),
     _SidebarDestination(
@@ -472,7 +472,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
   double _remainingForIndex(int index) {
     final previousTotal = _paymentEntries
         .take(index)
-        .fold(0.0, (sum, entry) => sum + _parseAmount(entry.amountController.text));
+        .fold(
+          0.0,
+          (sum, entry) => sum + _parseAmount(entry.amountController.text),
+        );
     final remaining = _totalSalesAmount - previousTotal;
     return remaining > 0 ? remaining : 0.0;
   }
@@ -527,8 +530,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         return;
       }
       setState(() {
-        _manualEntryError =
-            'Unable to load payment methods. Please try again.';
+        _manualEntryError = 'Unable to load payment methods. Please try again.';
       });
     } finally {
       if (mounted) {
@@ -552,9 +554,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     return const [];
   }
 
-  Map<String, dynamic> _extractInvoiceOptions(
-    Map<String, dynamic> payload,
-  ) {
+  Map<String, dynamic> _extractInvoiceOptions(Map<String, dynamic> payload) {
     final entries = _extractList(payload);
     final Map<String, dynamic> options = {};
     for (final entry in entries) {
@@ -596,8 +596,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       final numberFormat = options['invoice_number_format']?.toString() ?? '';
       final nextInvoiceNumber =
           options['next_invoice_number']?.toString() ?? '0';
-      final formattedNumber =
-          '$prefix${nextInvoiceNumber.padLeft(5, '0')}';
+      final formattedNumber = '$prefix${nextInvoiceNumber.padLeft(5, '0')}';
       final dateCreated = _dateController.text;
       final paymentModeIds = _paymentEntries
           .map((entry) => entry.paymentModeId)
@@ -629,10 +628,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
         authToken: token,
       );
 
-      final invoicePayload = invoiceResponse.data['data'];
-      final invoiceIdValue = invoicePayload is Map<String, dynamic>
-          ? invoicePayload['id']?.toString()
-          : invoiceResponse.data['id']?.toString();
+      final invoicePayload = invoiceResponse.data['result'];
+      final invoiceIdValue = invoicePayload['id']?.toString();
+
       if (invoiceIdValue == null || invoiceIdValue.isEmpty) {
         throw Exception('Invoice ID missing.');
       }
@@ -651,9 +649,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
           )
           .toList();
 
-      debugPrint('Manual entry payments payload (${payments.length}): '
-          '$payments');
-
       await _apiClient.postJson(
         '/api/v1/invoice_payment_records',
         body: payments,
@@ -663,9 +658,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
       if (!mounted) {
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Manual entry submitted.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Manual entry submitted.')));
     } catch (_) {
       if (!mounted) {
         return;
@@ -689,10 +684,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         children: [
           const Text(
             'Manual Entry',
-            style: TextStyle(
-              fontSize: 26,
-              fontWeight: FontWeight.w600,
-            ),
+            style: TextStyle(fontSize: 26, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 8),
           const Text(
@@ -729,98 +721,98 @@ class _RegisterScreenState extends State<RegisterScreen> {
             style: TextStyle(fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 12),
-          ..._paymentEntries.asMap().entries.map(
-            (entry) {
-              final index = entry.key;
-              final payment = entry.value;
-              final remaining = _remainingForIndex(index);
-              final hintText = _totalSalesAmount > 0
-                  ? _formatCurrency(remaining)
-                  : null;
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: DropdownButtonFormField<String>(
-                        value: payment.paymentModeId,
-                        isExpanded: true,
-                        items: _paymentModes
-                            .map(
-                              (mode) => DropdownMenuItem<String>(
-                                value: mode.id,
-                                child: Text(
-                                  mode.name,
-                                  overflow: TextOverflow.fade,
-                                  softWrap: false,
-                                ),
+          ..._paymentEntries.asMap().entries.map((entry) {
+            final index = entry.key;
+            final payment = entry.value;
+            final remaining = _remainingForIndex(index);
+            final hintText = _totalSalesAmount > 0
+                ? _formatCurrency(remaining)
+                : null;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      value: payment.paymentModeId,
+                      isExpanded: true,
+                      items: _paymentModes
+                          .map(
+                            (mode) => DropdownMenuItem<String>(
+                              value: mode.id,
+                              child: Text(
+                                mode.name,
+                                overflow: TextOverflow.fade,
+                                softWrap: false,
                               ),
-                            )
-                            .toList(),
-                        selectedItemBuilder: (context) => _paymentModes
-                            .map(
-                              (mode) => Align(
-                                alignment: Alignment.centerLeft,
-                                child: Text(
-                                  mode.name,
-                                  overflow: TextOverflow.fade,
-                                  softWrap: false,
-                                ),
+                            ),
+                          )
+                          .toList(),
+                      selectedItemBuilder: (context) => _paymentModes
+                          .map(
+                            (mode) => Align(
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                mode.name,
+                                overflow: TextOverflow.fade,
+                                softWrap: false,
                               ),
-                            )
-                            .toList(),
-                        decoration: const InputDecoration(
-                          labelText: 'Method',
-                          border: OutlineInputBorder(),
-                        ),
-                        onChanged: _isLoadingPaymentModes
-                            ? null
-                            : (value) {
-                                if (value == null) {
-                                  return;
-                                }
-                                setState(() {
-                                  payment.paymentModeId = value;
-                                });
-                              },
+                            ),
+                          )
+                          .toList(),
+                      decoration: const InputDecoration(
+                        labelText: 'Method',
+                        border: OutlineInputBorder(),
+                      ),
+                      onChanged: _isLoadingPaymentModes
+                          ? null
+                          : (value) {
+                              if (value == null) {
+                                return;
+                              }
+                              setState(() {
+                                payment.paymentModeId = value;
+                              });
+                            },
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      controller: payment.amountController,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      textAlign: TextAlign.end,
+                      inputFormatters: [_currencyFormatter],
+                      decoration: InputDecoration(
+                        labelText: 'Amount',
+                        hintText: hintText,
+                        prefixText: 'RM ',
+                        border: const OutlineInputBorder(),
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: TextField(
-                        controller: payment.amountController,
-                        keyboardType:
-                            const TextInputType.numberWithOptions(decimal: true),
-                        textAlign: TextAlign.end,
-                        inputFormatters: [_currencyFormatter],
-                        decoration: InputDecoration(
-                          labelText: 'Amount',
-                          hintText: hintText,
-                          prefixText: 'RM ',
-                          border: const OutlineInputBorder(),
-                        ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      controller: payment.discountController,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      textAlign: TextAlign.end,
+                      inputFormatters: [_currencyFormatter],
+                      decoration: const InputDecoration(
+                        labelText: 'Discount',
+                        prefixText: 'RM ',
+                        border: OutlineInputBorder(),
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: TextField(
-                        controller: payment.discountController,
-                        keyboardType:
-                            const TextInputType.numberWithOptions(decimal: true),
-                        textAlign: TextAlign.end,
-                        inputFormatters: [_currencyFormatter],
-                        decoration: const InputDecoration(
-                          labelText: 'Discount',
-                          prefixText: 'RM ',
-                          border: OutlineInputBorder(),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            },
-          ),
+                  ),
+                ],
+              ),
+            );
+          }),
           Align(
             alignment: Alignment.centerLeft,
             child: TextButton.icon(
@@ -833,7 +825,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
           Builder(
             builder: (context) {
               final remaining = _totalSalesAmount - _paymentTotal;
-              final isComplete = remaining == 0 &&
+              final isComplete =
+                  remaining == 0 &&
                   _totalSalesAmount > 0 &&
                   _hasValidPaymentModes;
               final remainingLabel = remaining >= 0
@@ -907,10 +900,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     final mainContent = Column(
       children: [
         Container(
-          padding: const EdgeInsets.symmetric(
-            horizontal: 24,
-            vertical: 20,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
           child: Row(
             children: [
               Padding(
@@ -980,9 +970,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         Text(
                           destination.description,
                           textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            color: Color(0xFF5F6368),
-                          ),
+                          style: const TextStyle(color: Color(0xFF5F6368)),
                         ),
                       ],
                     ),
@@ -1005,9 +993,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 ignoring: !_isSidebarVisible,
                 child: GestureDetector(
                   onTap: _toggleSidebar,
-                  child: Container(
-                    color: Colors.black.withOpacity(0.45),
-                  ),
+                  child: Container(color: Colors.black.withOpacity(0.45)),
                 ),
               ),
             ),
@@ -1146,26 +1132,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            destination.icon,
-            size: 64,
-            color: const Color(0xFF2C6E9E),
-          ),
+          Icon(destination.icon, size: 64, color: const Color(0xFF2C6E9E)),
           const SizedBox(height: 16),
           Text(
             destination.label,
-            style: const TextStyle(
-              fontSize: 26,
-              fontWeight: FontWeight.w600,
-            ),
+            style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 12),
           Text(
             destination.description,
             textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: Color(0xFF5F6368),
-            ),
+            style: const TextStyle(color: Color(0xFF5F6368)),
           ),
         ],
       ),
@@ -1178,16 +1155,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
     final statusColor = _isSyncLoading
         ? const Color(0xFF9E9E9E)
         : isReachable
-            ? const Color(0xFF2E7D32)
-            : const Color(0xFFC62828);
+        ? const Color(0xFF2E7D32)
+        : const Color(0xFFC62828);
     final statusText = _isSyncLoading
         ? 'Checking CRM API connectivity...'
         : status == null
-            ? 'Connection status not checked yet.'
-            : isReachable
-                ? 'CRM API reachable (HTTP ${status.statusCode ?? 'OK'}).'
-                : 'Unable to reach CRM API'
-                    '${status.errorMessage == null ? '.' : ': ${status.errorMessage}'}';
+        ? 'Connection status not checked yet.'
+        : isReachable
+        ? 'CRM API reachable (HTTP ${status.statusCode ?? 'OK'}).'
+        : 'Unable to reach CRM API'
+              '${status.errorMessage == null ? '.' : ': ${status.errorMessage}'}';
 
     return Container(
       width: 560,
@@ -1209,18 +1186,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
         children: [
           const Text(
             'CRM REST API',
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w600,
-            ),
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 8),
           Text(
             AppConfig.baseUrl,
-            style: const TextStyle(
-              color: Color(0xFF5F6368),
-              fontSize: 16,
-            ),
+            style: const TextStyle(color: Color(0xFF5F6368), fontSize: 16),
           ),
           const SizedBox(height: 24),
           Row(
@@ -1235,10 +1206,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: Text(
-                  statusText,
-                  style: const TextStyle(fontSize: 14),
-                ),
+                child: Text(statusText, style: const TextStyle(fontSize: 14)),
               ),
             ],
           ),
@@ -1263,9 +1231,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
           const Text(
             'Next steps: configure authentication headers and map CRM endpoints to '
             'the POS data models.',
-            style: TextStyle(
-              color: Color(0xFF5F6368),
-            ),
+            style: TextStyle(color: Color(0xFF5F6368)),
           ),
         ],
       ),
@@ -1297,20 +1263,11 @@ class _SidebarItem extends StatelessWidget {
       child: ListTile(
         dense: true,
         contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-        ),
-        leading: Icon(
-          icon,
-          color: textColor,
-          size: 20,
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        leading: Icon(icon, color: textColor, size: 20),
         title: Text(
           label,
-          style: TextStyle(
-            color: textColor,
-            fontWeight: fontWeight,
-          ),
+          style: TextStyle(color: textColor, fontWeight: fontWeight),
         ),
         onTap: onTap,
       ),
@@ -1348,8 +1305,8 @@ class _CurrencyTextInputFormatter extends TextInputFormatter {
 
 class _PaymentEntry {
   _PaymentEntry({required this.paymentModeId})
-      : amountController = TextEditingController(),
-        discountController = TextEditingController();
+    : amountController = TextEditingController(),
+      discountController = TextEditingController();
 
   String? paymentModeId;
   final TextEditingController amountController;
@@ -1357,10 +1314,7 @@ class _PaymentEntry {
 }
 
 class _PaymentMode {
-  const _PaymentMode({
-    required this.id,
-    required this.name,
-  });
+  const _PaymentMode({required this.id, required this.name});
 
   final String id;
   final String name;
