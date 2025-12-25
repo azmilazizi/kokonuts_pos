@@ -287,18 +287,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final TextEditingController _totalSalesController = TextEditingController();
   final List<_PaymentEntry> _paymentEntries = [];
   final ApiClient _apiClient = ApiClient();
+  final SecureStore _secureStore = const SecureStore();
   DateTime _selectedDate = DateTime.now();
   ApiStatus? _syncStatus;
   bool _isSyncLoading = false;
   bool _isSigningOut = false;
-
-  static const List<String> _paymentMethods = [
-    'Cash',
-    'Credit Card',
-    'Debit Card',
-    'Mobile Wallet',
-    'Gift Card',
-  ];
+  bool _isSubmittingManualEntry = false;
+  bool _isLoadingPaymentModes = false;
+  String? _manualEntryError;
+  String? _warehouseCode;
+  String? _warehouseId;
+  List<_PaymentMode> _paymentModes = [];
 
   static const List<_SidebarDestination> _destinations = [
     _SidebarDestination(
@@ -376,6 +375,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
     _totalSalesController.addListener(_onPaymentEntriesChanged);
     _paymentEntries.add(_createPaymentEntry());
     _refreshSyncStatus();
+    _loadWarehouseDetails();
+    _loadPaymentModes();
   }
 
   @override
@@ -386,6 +387,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
     for (final entry in _paymentEntries) {
       entry.amountController.removeListener(_onPaymentEntriesChanged);
       entry.amountController.dispose();
+      entry.discountController.removeListener(_onPaymentEntriesChanged);
+      entry.discountController.dispose();
     }
     super.dispose();
   }
@@ -424,8 +427,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   _PaymentEntry _createPaymentEntry() {
-    final entry = _PaymentEntry(method: _paymentMethods.first);
+    final entry = _PaymentEntry(
+      paymentModeId: _paymentModes.isNotEmpty ? _paymentModes.first.id : null,
+    );
     entry.amountController.addListener(_onPaymentEntriesChanged);
+    entry.discountController.addListener(_onPaymentEntriesChanged);
     return entry;
   }
 
@@ -449,6 +455,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
   }
 
+  double get _discountTotal {
+    return _paymentEntries.fold(
+      0,
+      (sum, entry) => sum + _parseAmount(entry.discountController.text),
+    );
+  }
+
+  bool get _hasValidPaymentModes {
+    return _paymentEntries.every((entry) => entry.paymentModeId != null);
+  }
+
   double _remainingForIndex(int index) {
     final previousTotal = _paymentEntries
         .take(index)
@@ -459,6 +476,192 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   String _formatCurrency(double amount) {
     return amount.toStringAsFixed(2);
+  }
+
+  Future<void> _loadWarehouseDetails() async {
+    final warehouseCode = await _secureStore.readWarehouseCode();
+    final warehouseId = await _secureStore.readWarehouseId();
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _warehouseCode = warehouseCode;
+      _warehouseId = warehouseId;
+    });
+  }
+
+  Future<void> _loadPaymentModes() async {
+    if (_isLoadingPaymentModes) {
+      return;
+    }
+    setState(() {
+      _isLoadingPaymentModes = true;
+    });
+    try {
+      final response = await _apiClient.getJson('/api/v1/payment_mode');
+      final modes = _extractList(response.data)
+          .whereType<Map<String, dynamic>>()
+          .map(_PaymentMode.fromJson)
+          .where((mode) => mode.id.isNotEmpty)
+          .toList();
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _paymentModes = modes;
+        for (final entry in _paymentEntries) {
+          entry.paymentModeId ??= _paymentModes.isNotEmpty
+              ? _paymentModes.first.id
+              : null;
+        }
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _manualEntryError =
+            'Unable to load payment methods. Please try again.';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoadingPaymentModes = false;
+        });
+      }
+    }
+  }
+
+  List<dynamic> _extractList(Map<String, dynamic> payload) {
+    final data = payload['data'] ?? payload['result'] ?? payload['items'];
+    if (data is List) {
+      return data;
+    }
+    if (payload is List) {
+      return payload;
+    }
+    return const [];
+  }
+
+  Map<String, dynamic> _extractInvoiceOptions(
+    Map<String, dynamic> payload,
+  ) {
+    final entries = _extractList(payload);
+    final Map<String, dynamic> options = {};
+    for (final entry in entries) {
+      if (entry is Map<String, dynamic>) {
+        final name = entry['name'];
+        if (name is String) {
+          options[name] = entry['value'];
+        }
+      }
+    }
+    return options;
+  }
+
+  dynamic _normalizeId(String id) {
+    return int.tryParse(id) ?? id;
+  }
+
+  Future<void> _submitManualEntry() async {
+    if (_isSubmittingManualEntry) {
+      return;
+    }
+    setState(() {
+      _isSubmittingManualEntry = true;
+      _manualEntryError = null;
+    });
+
+    try {
+      final warehouseId = _warehouseId ?? await _secureStore.readWarehouseId();
+      if (warehouseId == null || warehouseId.isEmpty) {
+        throw Exception('Missing warehouse id.');
+      }
+      final optionsResponse = await _apiClient.getJson('/api/v1/options');
+      final options = _extractInvoiceOptions(optionsResponse.data);
+      final prefix = options['invoice_prefix']?.toString() ?? '';
+      final numberFormat = options['invoice_number_format']?.toString() ?? '';
+      final nextInvoiceNumber =
+          options['next_invoice_number']?.toString() ?? '0';
+      final formattedNumber =
+          '$prefix${nextInvoiceNumber.padLeft(5, '0')}';
+      final dateCreated = _dateController.text;
+      final paymentModeIds = _paymentEntries
+          .map((entry) => entry.paymentModeId)
+          .whereType<String>()
+          .map(_normalizeId)
+          .toList();
+      final invoiceResponse = await _apiClient.postJson(
+        '/api/v1/invoices',
+        body: {
+          'clientid': 2,
+          'number': nextInvoiceNumber,
+          'prefix': prefix,
+          'number_format': numberFormat,
+          'formatted_number': formattedNumber,
+          'datecreated': dateCreated,
+          'date': dateCreated,
+          'duedate': dateCreated,
+          'currency': 1,
+          'subtotal': _totalSalesAmount,
+          'total': _totalSalesAmount,
+          'adjustment': 0.00,
+          'addedfrom': warehouseId,
+          'status': 2,
+          'allowed_payment_modes': paymentModeIds,
+          'discount_total': _discountTotal,
+          'sale_agent': warehouseId,
+          'include_shipping': 0,
+        },
+      );
+
+      final invoicePayload = invoiceResponse.data['data'];
+      final invoiceId = invoicePayload is Map<String, dynamic>
+          ? invoicePayload['id']?.toString()
+          : invoiceResponse.data['id']?.toString();
+      if (invoiceId == null || invoiceId.isEmpty) {
+        throw Exception('Invoice ID missing.');
+      }
+
+      final payments = _paymentEntries
+          .where((entry) => _parseAmount(entry.amountController.text) > 0)
+          .where((entry) => entry.paymentModeId != null)
+          .map(
+            (entry) => _apiClient.postJson(
+              '/api/v1/invoice_payments',
+              body: {
+                'invoiceid': invoiceId,
+                'amount': _parseAmount(entry.amountController.text),
+                'paymentmode': _normalizeId(entry.paymentModeId!),
+                'date': dateCreated,
+                'daterecorded': dateCreated,
+              },
+            ),
+          )
+          .toList();
+
+      await Future.wait(payments);
+
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Manual entry submitted.')),
+      );
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _manualEntryError = 'Manual entry submission failed. Please try again.';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSubmittingManualEntry = false;
+        });
+      }
+    }
   }
 
   Widget _buildManualEntryContent() {
@@ -520,12 +723,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   children: [
                     Expanded(
                       child: DropdownButtonFormField<String>(
-                        value: payment.method,
-                        items: _paymentMethods
+                        value: payment.paymentModeId,
+                        items: _paymentModes
                             .map(
-                              (method) => DropdownMenuItem<String>(
-                                value: method,
-                                child: Text(method),
+                              (mode) => DropdownMenuItem<String>(
+                                value: mode.id,
+                                child: Text(mode.name),
                               ),
                             )
                             .toList(),
@@ -533,14 +736,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           labelText: 'Method',
                           border: OutlineInputBorder(),
                         ),
-                        onChanged: (value) {
-                          if (value == null) {
-                            return;
-                          }
-                          setState(() {
-                            payment.method = value;
-                          });
-                        },
+                        onChanged: _isLoadingPaymentModes
+                            ? null
+                            : (value) {
+                                if (value == null) {
+                                  return;
+                                }
+                                setState(() {
+                                  payment.paymentModeId = value;
+                                });
+                              },
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -554,6 +759,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           hintText: hintText,
                           prefixText: '\$ ',
                           border: const OutlineInputBorder(),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextField(
+                        controller: payment.discountController,
+                        keyboardType:
+                            const TextInputType.numberWithOptions(decimal: true),
+                        decoration: const InputDecoration(
+                          labelText: 'Discount',
+                          prefixText: '\$ ',
+                          border: OutlineInputBorder(),
                         ),
                       ),
                     ),
@@ -574,7 +792,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
           Builder(
             builder: (context) {
               final remaining = _totalSalesAmount - _paymentTotal;
-              final isComplete = remaining == 0 && _totalSalesAmount > 0;
+              final isComplete = remaining == 0 &&
+                  _totalSalesAmount > 0 &&
+                  _hasValidPaymentModes;
               final remainingLabel = remaining >= 0
                   ? 'Remaining balance: \$ ${_formatCurrency(remaining)}'
                   : 'Over by: \$ ${_formatCurrency(remaining.abs())}';
@@ -590,10 +810,28 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       fontWeight: FontWeight.w600,
                     ),
                   ),
+                  if (_manualEntryError != null) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      _manualEntryError!,
+                      style: const TextStyle(
+                        color: Color(0xFFC62828),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 12),
                   ElevatedButton(
-                    onPressed: isComplete ? () {} : null,
-                    child: const Text('Submit manual entry'),
+                    onPressed: isComplete && !_isSubmittingManualEntry
+                        ? _submitManualEntry
+                        : null,
+                    child: _isSubmittingManualEntry
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('Submit manual entry'),
                   ),
                 ],
               );
@@ -623,7 +861,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   @override
   Widget build(BuildContext context) {
     const sidebarWidth = 260.0;
-    const username = 'Alex Tan';
+    final username = _warehouseCode ?? 'Warehouse';
     final destination = _destinations[_selectedIndex];
     final mainContent = Column(
       children: [
@@ -1052,9 +1290,28 @@ class _SidebarDestination {
 }
 
 class _PaymentEntry {
-  _PaymentEntry({required this.method})
-      : amountController = TextEditingController();
+  _PaymentEntry({required this.paymentModeId})
+      : amountController = TextEditingController(),
+        discountController = TextEditingController();
 
-  String method;
+  String? paymentModeId;
   final TextEditingController amountController;
+  final TextEditingController discountController;
+}
+
+class _PaymentMode {
+  const _PaymentMode({
+    required this.id,
+    required this.name,
+  });
+
+  final String id;
+  final String name;
+
+  factory _PaymentMode.fromJson(Map<String, dynamic> json) {
+    return _PaymentMode(
+      id: json['id']?.toString() ?? '',
+      name: json['name']?.toString() ?? 'Unknown',
+    );
+  }
 }
