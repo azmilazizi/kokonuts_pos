@@ -651,6 +651,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
           )
           .toList();
 
+      debugPrint('Manual entry payments payload (${payments.length}): '
+          '$payments');
+
       await _apiClient.postJson(
         '/api/v1/invoice_payment_records',
         body: payments,
