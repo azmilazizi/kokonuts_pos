@@ -150,6 +150,7 @@ class _AppStartState extends State<AppStart> with WidgetsBindingObserver {
         'token': token,
         'email': email,
       },
+      authToken: token,
     );
     return _parseBooleanResponse(response.data);
   }
@@ -498,7 +499,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
       _isLoadingPaymentModes = true;
     });
     try {
-      final response = await _apiClient.getJson('/api/v1/payment_mode');
+      final token = await _secureStore.readToken();
+      final response = await _apiClient.getJson(
+        '/api/v1/payment_mode',
+        authToken: token,
+      );
       final modes = _extractList(response.data)
           .whereType<Map<String, dynamic>>()
           .map(_PaymentMode.fromJson)
@@ -579,7 +584,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
       if (warehouseId == null || warehouseId.isEmpty) {
         throw Exception('Missing warehouse id.');
       }
-      final optionsResponse = await _apiClient.getJson('/api/v1/options');
+      final token = await _secureStore.readToken();
+      final optionsResponse = await _apiClient.getJson(
+        '/api/v1/options',
+        authToken: token,
+      );
       final options = _extractInvoiceOptions(optionsResponse.data);
       final prefix = options['invoice_prefix']?.toString() ?? '';
       final numberFormat = options['invoice_number_format']?.toString() ?? '';
@@ -615,6 +624,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
           'sale_agent': warehouseId,
           'include_shipping': 0,
         },
+        authToken: token,
       );
 
       final invoicePayload = invoiceResponse.data['data'];
@@ -643,6 +653,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         await _apiClient.postJson(
           '/api/v1/invoice_payment_records',
           body: payments,
+          authToken: token,
         );
       }
 

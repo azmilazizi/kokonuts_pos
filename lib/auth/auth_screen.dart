@@ -121,12 +121,14 @@ class _AuthScreenState extends State<AuthScreen>
       if (email == null || email.isEmpty) {
         throw ApiException('Activation email missing.');
       }
+      final token = await _secureStore.readToken();
       final response = await _apiClient.postJson(
         '/api/v1/auth/login',
         body: {
           'email': email,
           'passcode': _loginCode,
         },
+        authToken: token,
       );
       final responsePayload = response.data['data'] is Map<String, dynamic>
           ? response.data['data'] as Map<String, dynamic>
@@ -166,11 +168,13 @@ class _AuthScreenState extends State<AuthScreen>
     });
 
     try {
+      final token = await _secureStore.readToken();
       await _apiClient.postJson(
         '/timesheets/api/check_in_out_passcode',
         body: {
           'passcode': _clockCode,
         },
+        authToken: token,
       );
       if (!mounted) {
         return;
