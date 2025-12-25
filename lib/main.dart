@@ -627,20 +627,22 @@ class _RegisterScreenState extends State<RegisterScreen> {
           .where((entry) => _parseAmount(entry.amountController.text) > 0)
           .where((entry) => entry.paymentModeId != null)
           .map(
-            (entry) => _apiClient.postJson(
-              '/api/v1/invoice_payments',
-              body: {
-                'invoiceid': invoiceId,
-                'amount': _parseAmount(entry.amountController.text),
-                'paymentmode': _normalizeId(entry.paymentModeId!),
-                'date': dateCreated,
-                'daterecorded': dateCreated,
-              },
-            ),
+            (entry) => {
+              'invoiceid': invoiceId,
+              'amount': _parseAmount(entry.amountController.text),
+              'paymentmode': _normalizeId(entry.paymentModeId!),
+              'date': dateCreated,
+              'daterecorded': dateCreated,
+            },
           )
           .toList();
 
-      await Future.wait(payments);
+      if (payments.isNotEmpty) {
+        await _apiClient.postJson(
+          '/api/v1/invoice_payment_records',
+          body: payments,
+        );
+      }
 
       if (!mounted) {
         return;
