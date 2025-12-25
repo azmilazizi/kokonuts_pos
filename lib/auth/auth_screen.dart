@@ -505,56 +505,70 @@ class _Keypad extends StatelessWidget {
       'back',
     ];
 
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3,
-        childAspectRatio: 1.3,
-      ),
-      itemCount: keys.length,
-      itemBuilder: (context, index) {
-        final key = keys[index];
-        Widget child;
-        VoidCallback? onTap;
-        if (key == 'clear') {
-          child = const Icon(Icons.close, size: 26, color: Color(0xFF7C7773));
-          onTap = onClear;
-        } else if (key == 'back') {
-          child = const Icon(
-            Icons.backspace_outlined,
-            size: 24,
-            color: Color(0xFF7C7773),
-          );
-          onTap = onBackspace;
-        } else {
-          child = Text(
-            key,
-            style: const TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w600,
-              color: Color(0xFF2D2A28),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final targetHeight = (constraints.maxWidth / 3) * 4;
+        final height = (constraints.hasBoundedHeight
+                ? targetHeight.clamp(0, constraints.maxHeight)
+                : targetHeight)
+            .toDouble();
+        final childAspectRatio =
+            (constraints.maxWidth / 3) / ((height == 0 ? 1 : height) / 4);
+        return SizedBox(
+          height: height,
+          child: GridView.builder(
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 3,
+              childAspectRatio: childAspectRatio,
             ),
-          );
-          onTap = () => onDigitPressed(key);
-        }
-        return Padding(
-          padding: const EdgeInsets.all(6),
-          child: Material(
-            color: Colors.transparent,
-            child: Ink(
-              decoration: BoxDecoration(
-                color: const Color(0xFFF7F4F2),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: InkWell(
-                onTap: onTap,
-                borderRadius: BorderRadius.circular(12),
-                splashColor: const Color(0xFFE67516).withOpacity(0.18),
-                highlightColor: const Color(0xFFE67516).withOpacity(0.1),
-                child: Center(child: child),
-              ),
-            ),
+            itemCount: keys.length,
+            itemBuilder: (context, index) {
+              final key = keys[index];
+              Widget child;
+              VoidCallback? onTap;
+              if (key == 'clear') {
+                child =
+                    const Icon(Icons.close, size: 26, color: Color(0xFF7C7773));
+                onTap = onClear;
+              } else if (key == 'back') {
+                child = const Icon(
+                  Icons.backspace_outlined,
+                  size: 24,
+                  color: Color(0xFF7C7773),
+                );
+                onTap = onBackspace;
+              } else {
+                child = Text(
+                  key,
+                  style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF2D2A28),
+                  ),
+                );
+                onTap = () => onDigitPressed(key);
+              }
+              return Padding(
+                padding: const EdgeInsets.all(6),
+                child: Material(
+                  color: Colors.transparent,
+                  child: Ink(
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF7F4F2),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: InkWell(
+                      onTap: onTap,
+                      borderRadius: BorderRadius.circular(12),
+                      splashColor: const Color(0xFFE67516).withOpacity(0.18),
+                      highlightColor: const Color(0xFFE67516).withOpacity(0.1),
+                      child: Center(child: child),
+                    ),
+                  ),
+                ),
+              );
+            },
           ),
         );
       },
