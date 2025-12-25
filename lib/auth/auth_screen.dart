@@ -233,27 +233,34 @@ class _AuthScreenState extends State<AuthScreen>
                           _buildClockedInPanel(isWide: false),
                         ],
                       );
-                return Center(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 24,
-                      vertical: 32,
-                    ),
-                    child: LayoutBuilder(
-                      builder: (context, innerConstraints) {
-                        return FittedBox(
-                          fit: BoxFit.scaleDown,
-                          alignment: Alignment.topCenter,
-                          child: ConstrainedBox(
-                            constraints: BoxConstraints(
-                              maxWidth: isWide ? 920 : 520,
-                              maxHeight: innerConstraints.maxHeight,
-                            ),
-                            child: content,
+                return Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 32,
+                  ),
+                  child: LayoutBuilder(
+                    builder: (context, innerConstraints) {
+                      return SingleChildScrollView(
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(
+                            minHeight: innerConstraints.maxHeight,
                           ),
-                        );
-                      },
-                    ),
+                          child: Center(
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              alignment: Alignment.topCenter,
+                              child: ConstrainedBox(
+                                constraints: BoxConstraints(
+                                  maxWidth: isWide ? 920 : 520,
+                                  maxHeight: innerConstraints.maxHeight,
+                                ),
+                                child: content,
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
                   ),
                 );
               },
