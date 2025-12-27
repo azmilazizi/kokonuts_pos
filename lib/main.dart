@@ -470,22 +470,46 @@ class _RegisterScreenState extends State<RegisterScreen> {
     return double.tryParse(normalized) ?? 0;
   }
 
+  int _parseCents(String value) {
+    final normalized = value.replaceAll(',', '').trim();
+    if (normalized.isEmpty) {
+      return 0;
+    }
+    final parsed = double.tryParse(normalized);
+    if (parsed == null) {
+      return 0;
+    }
+    return (parsed * 100).round();
+  }
+
+  int get _totalSalesCents {
+    return _parseCents(_totalSalesController.text);
+  }
+
+  int get _paymentTotalCents {
+    return _paymentEntries.fold(
+      0,
+      (sum, entry) => sum + _parseCents(entry.amountController.text),
+    );
+  }
+
+  int get _discountTotalCents {
+    return _paymentEntries.fold(
+      0,
+      (sum, entry) => sum + _parseCents(entry.discountController.text),
+    );
+  }
+
   double get _totalSalesAmount {
-    return _parseAmount(_totalSalesController.text);
+    return _totalSalesCents / 100;
   }
 
   double get _paymentTotal {
-    return _paymentEntries.fold(
-      0,
-      (sum, entry) => sum + _parseAmount(entry.amountController.text),
-    );
+    return _paymentTotalCents / 100;
   }
 
   double get _discountTotal {
-    return _paymentEntries.fold(
-      0,
-      (sum, entry) => sum + _parseAmount(entry.discountController.text),
-    );
+    return _discountTotalCents / 100;
   }
 
   bool get _hasValidPaymentModes {
@@ -493,14 +517,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   double _remainingForIndex(int index) {
-    final previousTotal = _paymentEntries
+    final previousTotalCents = _paymentEntries
         .take(index)
         .fold(
-          0.0,
-          (sum, entry) => sum + _parseAmount(entry.amountController.text),
+          0,
+          (sum, entry) => sum + _parseCents(entry.amountController.text),
         );
-    final remaining = _totalSalesAmount - previousTotal;
-    return remaining > 0 ? remaining : 0.0;
+    final remainingCents = _totalSalesCents - previousTotalCents;
+    return remainingCents > 0 ? remainingCents / 100 : 0.0;
   }
 
   String _formatCurrency(double amount) {
@@ -724,7 +748,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               prefixIcon: Icon(Icons.calendar_today),
               border: OutlineInputBorder(),
             ),
-            onTap: _pickDate,
+              onTap: _pickDate,
           ),
           const SizedBox(height: 20),
           TextField(
@@ -843,10 +867,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
           const SizedBox(height: 12),
           Builder(
             builder: (context) {
-              final remaining = _totalSalesAmount - _paymentTotal;
+              final remainingCents = _totalSalesCents - _paymentTotalCents;
+              final remaining = remainingCents / 100;
               final isComplete =
-                  remaining == 0 &&
-                  _totalSalesAmount > 0 &&
+                  remainingCents == 0 &&
+                  _totalSalesCents > 0 &&
                   _hasValidPaymentModes;
               final remainingLabel = remaining >= 0
                   ? 'Remaining balance: RM ${_formatCurrency(remaining)}'
