@@ -431,6 +431,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
     });
   }
 
+  void _removePaymentEntry(int index) {
+    if (_paymentEntries.length <= 1) {
+      return;
+    }
+    final entry = _paymentEntries.removeAt(index);
+    entry.amountController.removeListener(_onPaymentEntriesChanged);
+    entry.amountController.dispose();
+    entry.discountController.removeListener(_onPaymentEntriesChanged);
+    entry.discountController.dispose();
+    setState(() {});
+  }
+
   void _resetManualEntryForm() {
     final now = DateTime.now();
     for (final entry in _paymentEntries) {
@@ -775,6 +787,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
             final hintText = _totalSalesAmount > 0
                 ? _formatCurrency(remaining)
                 : null;
+            final canRemove = _paymentEntries.length > 1;
             return Padding(
               padding: const EdgeInsets.only(bottom: 12),
               child: Row(
@@ -851,6 +864,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         border: OutlineInputBorder(),
                       ),
                     ),
+                  ),
+                  const SizedBox(width: 12),
+                  IconButton(
+                    tooltip: canRemove ? 'Remove payment method' : null,
+                    onPressed:
+                        canRemove ? () => _removePaymentEntry(index) : null,
+                    icon: const Icon(Icons.remove_circle_outline),
                   ),
                 ],
               ),
