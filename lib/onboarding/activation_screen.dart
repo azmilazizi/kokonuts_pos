@@ -13,7 +13,6 @@ class ActivationScreen extends StatefulWidget {
 }
 
 class _ActivationScreenState extends State<ActivationScreen> {
-  final TextEditingController _storeCodeController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final ApiClient _apiClient = ApiClient();
@@ -22,67 +21,20 @@ class _ActivationScreenState extends State<ActivationScreen> {
   bool _isSubmitting = false;
   String? _errorMessage;
 
-  bool? _parseBool(dynamic value) {
-    if (value is bool) {
-      return value;
-    }
-    if (value is num) {
-      return value != 0;
-    }
-    if (value is String) {
-      final normalized = value.trim().toLowerCase();
-      if (['true', '1', 'yes'].contains(normalized)) {
-        return true;
-      }
-      if (['false', '0', 'no'].contains(normalized)) {
-        return false;
-      }
-    }
-    return null;
-  }
-
-  bool _extractActivationResult(Map<String, dynamic> responseData) {
-    final candidates = [
-      responseData['data'],
-      responseData['result'],
-      responseData['success'],
-      responseData['status'],
-    ];
-    for (final candidate in candidates) {
-      final parsed = _parseBool(candidate);
-      if (parsed != null) {
-        return parsed;
-      }
-      if (candidate is Map<String, dynamic>) {
-        for (final key in ['status', 'success', 'result', 'data']) {
-          final nestedParsed = _parseBool(candidate[key]);
-          if (nestedParsed != null) {
-            return nestedParsed;
-          }
-        }
-      }
-    }
-    return false;
-  }
-
   @override
   void dispose() {
-    _storeCodeController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
 
   Future<void> _activate() async {
-    if (_isSubmitting) {
-      return;
-    }
-    final storeCode = _storeCodeController.text.trim();
+    if (_isSubmitting) return;
     final email = _emailController.text.trim();
     final password = _passwordController.text;
-    if (storeCode.isEmpty || email.isEmpty || password.isEmpty) {
+    if (email.isEmpty || password.isEmpty) {
       setState(() {
-        _errorMessage = 'Please fill in the store code, email, and password.';
+        _errorMessage = 'Please fill in your email and password.';
       });
       return;
     }
@@ -94,61 +46,39 @@ class _ActivationScreenState extends State<ActivationScreen> {
 
     try {
       final response = await _apiClient.postJson(
-        '/omni_sales/api/v1/install/verify',
-        body: {
-          'warehouse_code': storeCode,
-          'email': email,
-          'password': password,
-        },
+        '/pos/api/v1/login',
+        body: {'email': email, 'password': password},
       );
-      final responseData = response.data;
-      if (!_extractActivationResult(responseData)) {
-        throw ApiException('Activation was rejected.');
-      }
-      final Map<String, dynamic> responsePayload =
-          responseData['data'] is Map<String, dynamic>
-          ? responseData['data'] as Map<String, dynamic>
-          : responseData['result'] is Map<String, dynamic>
-          ? responseData['result'] as Map<String, dynamic>
-          : responseData;
-      final Map<String, dynamic>? authentication =
-          responsePayload['authentication'] is Map<String, dynamic>
-          ? responsePayload['authentication'] as Map<String, dynamic>
-          : null;
-      final Map<String, dynamic>? authHeaders = authentication != null
-          ? authentication['headers'] as Map<String, dynamic>?
-          : null;
-      final authToken =
-          responsePayload['auth_token'] ??
-          responsePayload['token'] ??
-          authentication?['token'] ??
-          authentication?['authtoken'] ??
-          authentication?['Authorization'] ??
-          authHeaders?['authtoken'] ??
-          authHeaders?['Authorization'];
-      final staffId = responsePayload['staff_id'];
-      final warehouseCode =
-          responsePayload['warehouse_code'] ?? responsePayload['warehouseCode'];
-      final warehouseId =
-          responsePayload['warehouse_id'] ?? responsePayload['warehouseId'];
-      if (authToken == null || staffId == null) {
-        throw ApiException('Activation response missing token or staff id.');
-      }
+
+      final data = response.data['data'] as Map<String, dynamic>;
+      final staff = data['staff'] as Map<String, dynamic>;
+      final access = (data['access'] as List<dynamic>)[0] as Map<String, dynamic>;
+      final warehouse = access['warehouse'] as Map<String, dynamic>;
+
       await Future.wait([
         _secureStore.writeAuth(
-          token: authToken.toString(),
-          staffId: staffId.toString(),
+          token: access['token'] as String,
+          staffId: staff['id'].toString(),
         ),
         _secureStore.writeActivationDetails(
-          email: email,
-          warehouseCode: (warehouseCode ?? storeCode).toString(),
-          warehouseId: warehouseId?.toString(),
+          email: staff['email'] as String,
+          warehouseCode: warehouse['code'] as String,
+          warehouseId: warehouse['id'].toString(),
+          staffName: staff['full_name'] as String,
+          warehouseName: warehouse['name'] as String,
         ),
       ]);
+
       widget.onActivated();
-    } catch (error) {
+    } on ApiException catch (e) {
       setState(() {
-        _errorMessage = 'Activation failed. Please check your details.';
+        _errorMessage = e.statusCode == 401 || e.statusCode == 403
+            ? 'Invalid email or password.'
+            : 'Activation failed. Please try again.';
+      });
+    } catch (_) {
+      setState(() {
+        _errorMessage = 'Could not connect. Check your internet connection.';
       });
     } finally {
       if (mounted) {
@@ -157,6 +87,90 @@ class _ActivationScreenState extends State<ActivationScreen> {
         });
       }
     }
+  }
+
+  Widget _buildFields(BuildContext context) {
+    final labelStyle = Theme.of(context).textTheme.labelMedium?.copyWith(
+          color: const Color(0xFF6D6D6D),
+          letterSpacing: 1.1,
+          fontWeight: FontWeight.w600,
+        );
+
+    final emailField = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('EMAIL', style: labelStyle),
+        const SizedBox(height: 8),
+        TextField(
+          controller: _emailController,
+          keyboardType: TextInputType.emailAddress,
+          decoration: InputDecoration(
+            hintText: 'john.doe@gmail.com',
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            suffixIcon: _emailController.text.isEmpty
+                ? null
+                : IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () {
+                      _emailController.clear();
+                      setState(() {});
+                    },
+                  ),
+          ),
+          onChanged: (_) => setState(() {}),
+        ),
+      ],
+    );
+
+    final passwordField = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('PASSWORD', style: labelStyle),
+        const SizedBox(height: 8),
+        TextField(
+          controller: _passwordController,
+          obscureText: !_isPasswordVisible,
+          decoration: InputDecoration(
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            suffixIcon: IconButton(
+              icon: Icon(
+                _isPasswordVisible ? Icons.visibility_off : Icons.visibility,
+              ),
+              onPressed: () => setState(() {
+                _isPasswordVisible = !_isPasswordVisible;
+              }),
+            ),
+          ),
+        ),
+      ],
+    );
+
+    final isNarrow = MediaQuery.of(context).size.width < 500;
+    if (isNarrow) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          emailField,
+          const SizedBox(height: 16),
+          passwordField,
+        ],
+      );
+    }
+
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(child: emailField),
+          const SizedBox(width: 16),
+          Expanded(child: passwordField),
+        ],
+      ),
+    );
   }
 
   Widget _buildCard(BuildContext context) {
@@ -191,108 +205,7 @@ class _ActivationScreenState extends State<ActivationScreen> {
                 ),
               ),
               const SizedBox(height: 28),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'STORE CODE',
-                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                    color: const Color(0xFF6D6D6D),
-                    letterSpacing: 1.1,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _storeCodeController,
-                decoration: InputDecoration(
-                  hintText: 'KKNTS-001',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-              Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'EMAIL',
-                          style: Theme.of(context).textTheme.labelMedium
-                              ?.copyWith(
-                                color: const Color(0xFF6D6D6D),
-                                letterSpacing: 1.1,
-                                fontWeight: FontWeight.w600,
-                              ),
-                        ),
-                        const SizedBox(height: 8),
-                        TextField(
-                          controller: _emailController,
-                          keyboardType: TextInputType.emailAddress,
-                          decoration: InputDecoration(
-                            hintText: 'john.doe@gmail.com',
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            suffixIcon: _emailController.text.isEmpty
-                                ? null
-                                : IconButton(
-                                    icon: const Icon(Icons.close),
-                                    onPressed: () {
-                                      _emailController.clear();
-                                      setState(() {});
-                                    },
-                                  ),
-                          ),
-                          onChanged: (_) => setState(() {}),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'PASSWORD',
-                          style: Theme.of(context).textTheme.labelMedium
-                              ?.copyWith(
-                                color: const Color(0xFF6D6D6D),
-                                letterSpacing: 1.1,
-                                fontWeight: FontWeight.w600,
-                              ),
-                        ),
-                        const SizedBox(height: 8),
-                        TextField(
-                          controller: _passwordController,
-                          obscureText: !_isPasswordVisible,
-                          decoration: InputDecoration(
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            suffixIcon: IconButton(
-                              icon: Icon(
-                                _isPasswordVisible
-                                    ? Icons.visibility_off
-                                    : Icons.visibility,
-                              ),
-                              onPressed: () {
-                                setState(() {
-                                  _isPasswordVisible = !_isPasswordVisible;
-                                });
-                              },
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
+              _buildFields(context),
               const SizedBox(height: 28),
               if (_errorMessage != null) ...[
                 Text(

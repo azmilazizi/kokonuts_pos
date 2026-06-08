@@ -42,6 +42,19 @@ class ApiClient {
     return _decodeResponse(response);
   }
 
+  Future<ApiResponse> patchJson(String path,
+      {Object? body, Map<String, String>? headers, String? authToken}) async {
+    final uri = buildUri(path);
+    final response = await _client
+        .patch(
+          uri,
+          headers: _defaultHeaders(headers, authToken: authToken),
+          body: body == null ? null : jsonEncode(body),
+        )
+        .timeout(AppConfig.requestTimeout);
+    return _decodeResponse(response);
+  }
+
   Future<ApiStatus> ping() async {
     final uri = buildUri('/');
     try {
@@ -64,7 +77,7 @@ class ApiClient {
     return {
       'Accept': 'application/json',
       'Content-Type': 'application/json',
-      if (authToken != null && authToken.isNotEmpty) 'authtoken': authToken,
+      if (authToken != null && authToken.isNotEmpty) 'Authorization': 'Bearer $authToken',
       if (headers != null) ...headers,
     };
   }

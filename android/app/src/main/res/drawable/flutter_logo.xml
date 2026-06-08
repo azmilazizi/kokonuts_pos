@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="80dp"
+    android:height="80dp"
+    android:viewportWidth="80"
+    android:viewportHeight="80">
+    <!-- Two overlapping diagonal parallelograms that form the Flutter logo mark -->
+    <!-- Top blade (larger) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M12,38 L50,0 L68,0 L30,38 Z" />
+    <!-- Top blade lower half -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M12,38 L30,38 L50,58 L32,58 Z" />
+    <!-- Bottom blade -->
+    <path
+        android:fillColor="#A6FFFFFF"
+        android:pathData="M32,58 L50,58 L68,78 L50,78 Z" />
+</vector>

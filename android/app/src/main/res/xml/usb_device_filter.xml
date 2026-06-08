@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- USB printer device class (0x07 = 7) covers most receipt printers -->
+    <usb-device class="7" />
+
+    <!-- Bixolon (VID 0x1504 = 5380, 0x0721 = 1825) -->
+    <usb-device vendor-id="5380" />
+    <usb-device vendor-id="1825" />
+
+    <!-- Epson (0x04B8 = 1208) -->
+    <usb-device vendor-id="1208" />
+
+    <!-- Star Micronics (0x0519 = 1305) -->
+    <usb-device vendor-id="1305" />
+
+    <!-- Zebra (0x0A5F = 2655) -->
+    <usb-device vendor-id="2655" />
+
+    <!-- Rongta (0x1659 = 5721) -->
+    <usb-device vendor-id="5721" />
+</resources>

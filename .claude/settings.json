@@ -1,0 +1,37 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -E \"\\\\.dart$\")",
+      "Bash(awk -F: '$2 >= 1992 && $2 <= 2140')",
+      "Bash(grep -v \"^$\\\\|flutter upgrade\\\\|new version\\\\|To update\")",
+      "Bash(unzip -p /Users/azmil/Sites/kokonuts_pos/android/app/libs/BixolonLabelPrinterLibrary_V2.1.1.jar)",
+      "Bash(flutter build *)",
+      "Bash(/usr/libexec/java_home -V)",
+      "Read(//Library/Java/JavaVirtualMachines/**)",
+      "Read(//usr/local/**)",
+      "Bash(find /Users/azmil/Library/Java /opt/homebrew -name \"javap\" 2>/dev/null | head -3 *)",
+      "Read(//Users/azmil/Library/**)",
+      "Read(//Users/azmil/**)",
+      "Bash(~/Library/Android/sdk/build-tools/35.0.0/dexdump --help)",
+      "Read(//private/tmp/**)",
+      "Bash(cp /Users/azmil/Sites/kokonuts_pos/android/app/libs/BixolonLabelPrinterLibrary_V2.1.1.jar .)",
+      "Bash(unzip -p BixolonLabelPrinterLibrary_V2.1.1.jar)",
+      "Bash(unzip -q BixolonLabelPrinterLibrary_V2.1.1.jar)",
+      "Bash('/Applications/Android Studio.app/Contents/jbr/Contents/Home/bin/javap' -verbose /tmp/com/bixolon/labelprinter/BixolonLabelPrinter.class)",
+      "Bash('/Applications/Android Studio.app/Contents/jbr/Contents/Home/bin/javap' -verbose '/tmp/com/bixolon/labelprinter/BixolonLabelPrinter$Companion.class')",
+      "Bash('/Applications/Android Studio.app/Contents/jbr/Contents/Home/bin/javap' -verbose -c /tmp/com/bixolon/labelprinter/BixolonLabelPrinter.class)",
+      "Bash(awk '/public final int drawText/{p=1} p{print} /^$/{if\\(p\\) {count++; if\\(count>2\\) {p=0; count=0}}}')",
+      "Bash(javap -classpath BixolonLabelPrinterLibrary_V2.1.1.jar -constants com.bixolon.labelprinter.BixolonLabelPrinter)",
+      "Bash(javap -classpath BixolonLabelPrinterLibrary_V2.1.1.jar com.bixolon.labelprinter.BixolonLabelPrinter)",
+      "Bash(/usr/libexec/java_home)",
+      "Bash(ls /Users/azmil/Library/Java/ 2>/dev/null; find /opt /usr/local -name \"javap\" 2>/dev/null | head -5; find ~/.sdkman ~/.gradle -name \"javap\" 2>/dev/null | head -5)",
+      "Read(//opt/**)",
+      "Bash(ls /Applications/ | grep -i android; find /Applications -name \"javap\" 2>/dev/null | head -3)",
+      "Read(//Applications/**)",
+      "Bash('/Applications/Android Studio.app/Contents/jbr/Contents/Home/bin/javap' -classpath /Users/azmil/Sites/kokonuts_pos/android/app/libs/BixolonLabelPrinterLibrary_V2.1.1.jar -constants com.bixolon.labelprinter.BixolonLabelPrinter)",
+      "Bash('/Applications/Android Studio.app/Contents/jbr/Contents/Home/bin/javap' -classpath /Users/azmil/Sites/kokonuts_pos/android/app/libs/BixolonLabelPrinterLibrary_V2.1.1.jar com.bixolon.labelprinter.BixolonLabelPrinter)",
+      "Bash('/Applications/Android Studio.app/Contents/jbr/Contents/Home/bin/javap' -classpath /Users/azmil/Sites/kokonuts_pos/android/app/libs/BixolonLabelPrinterLibrary_V2.1.1.jar -verbose com.bixolon.labelprinter.BixolonLabelPrinter)",
+      "Bash('/Applications/Android Studio.app/Contents/jbr/Contents/Home/bin/javap' -classpath /Users/azmil/Sites/kokonuts_pos/android/app/libs/BixolonLabelPrinterLibrary_V2.1.1.jar -c com.bixolon.labelprinter.BixolonLabelPrinter)"
+    ]
+  }
+}

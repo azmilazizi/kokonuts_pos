@@ -31,47 +31,38 @@ dependencies:
   flutter:
     sdk: flutter
   flutter_secure_storage: ^9.2.2
-
-  # The following adds the Cupertino Icons font to your application.
-  # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
   http: ^1.2.2
-  flutter_launcher_icons: ^0.14.4
-
-flutter_launcher_icons:
-  android: true
-  ios: false
-  image_path_android: assets/icon.png
-  adaptive_icon_background: assets/adaptive_icon_background.png
-  adaptive_icon_foreground: assets/adaptive_icon_foreground.png
-
+  sunmi_printer_plus: ^4.1.1
+  image: ^4.2.0
+  shared_preferences: ^2.3.5
+  sqflite: ^2.3.3+1
+  connectivity_plus: ^6.1.4
+  path: ^1.9.1
+  qr: ^3.0.2
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-
-  # The "flutter_lints" package below contains a set of recommended lints to
-  # encourage good coding practices. The lint set provided by the package is
-  # activated in the `analysis_options.yaml` file located at the root of your
-  # package. See that file for information about deactivating specific lint
-  # rules and activating additional ones.
   flutter_lints: ^5.0.0
+  flutter_launcher_icons: ^0.14.4 # <-- MOVED HERE
 
-# For information on the generic Dart part of this file, see the
-# following page: https://dart.dev/tools/pub/pubspec
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: "assets/icon.png"
 
-# The following section is specific to Flutter packages.
 flutter:
-
-  # The following line ensures that the Material Icons font is
-  # included with your application, so that you can use the icons in
-  # the material Icons class.
   uses-material-design: true
+  
+  # I removed the assets block that contained your icons to save APK size!
+  # If you have other assets like custom images used IN the app, add them back here.
 
   # To add assets to your application, add an assets section, like this:
   assets:
     - assets/adaptive_icon_background.png
     - assets/adaptive_icon_foreground.png
+    - assets/icon.png
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

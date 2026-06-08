@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+        Bixolon USB vendor IDs:
+          0x1504 = 5380  (newer Bixolon label printers)
+          0x0721 = 1825  (legacy Bixolon devices)
+
+        Android uses this list to:
+          1. Show the "Allow app to access USB device?" dialog exactly once.
+          2. Grant the app permanent permission so UsbManager.hasPermission()
+             returns true immediately after the user accepts.
+    -->
+    <usb-device vendor-id="5380" />
+    <usb-device vendor-id="1825" />
+</resources>

@@ -37,6 +37,20 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
+
+    sourceSets {
+        getByName("main") {
+            // Expose libs/jniLibs so libbxl_common.so (arm64-v8a) is packaged into the APK.
+            jniLibs.srcDirs("libs/jniLibs")
+        }
+    }
+}
+
+dependencies {
+    // Pull in BixolonLabelPrinter_Vxxx.jar and libcommon_Vxxx.jar from app/libs/.
+    implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.jar"))))
+    // Bixolon PDF library (AAR) required by BixolonLabelPrinter SDK.
+    implementation(files("libs/pdf/Bixolon_pdf.aar"))
 }
 
 flutter {

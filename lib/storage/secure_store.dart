@@ -6,9 +6,12 @@ class SecureStore {
 
   static const String _tokenKey = 'auth_token';
   static const String _staffIdKey = 'staff_id';
+  static const String _staffNameKey = 'staff_name';
   static const String _activationEmailKey = 'activation_email';
   static const String _warehouseCodeKey = 'warehouse_code';
   static const String _warehouseIdKey = 'warehouse_id';
+  static const String _warehouseNameKey = 'warehouse_name';
+  static const String _queueNumberKey = 'queue_number';
 
   final FlutterSecureStorage _storage;
 
@@ -18,6 +21,10 @@ class SecureStore {
 
   Future<String?> readStaffId() {
     return _storage.read(key: _staffIdKey);
+  }
+
+  Future<String?> readStaffName() {
+    return _storage.read(key: _staffNameKey);
   }
 
   Future<String?> readActivationEmail() {
@@ -30,6 +37,26 @@ class SecureStore {
 
   Future<String?> readWarehouseId() {
     return _storage.read(key: _warehouseIdKey);
+  }
+
+  Future<String?> readWarehouseName() {
+    return _storage.read(key: _warehouseNameKey);
+  }
+
+  Future<int?> readQueueNumber() async {
+    final v = await _storage.read(key: _queueNumberKey);
+    return v != null ? int.tryParse(v) : null;
+  }
+
+  Future<void> writeQueueNumber(int number) {
+    return _storage.write(key: _queueNumberKey, value: number.toString());
+  }
+
+  Future<int> nextQueueNumber() async {
+    final stored = await readQueueNumber();
+    final next = (stored == null || stored >= 399) ? 300 : stored + 1;
+    await writeQueueNumber(next);
+    return next;
   }
 
   Future<void> writeAuth({
@@ -46,12 +73,18 @@ class SecureStore {
     required String email,
     required String warehouseCode,
     String? warehouseId,
+    String? staffName,
+    String? warehouseName,
   }) {
     return Future.wait([
       _storage.write(key: _activationEmailKey, value: email),
       _storage.write(key: _warehouseCodeKey, value: warehouseCode),
       if (warehouseId != null)
         _storage.write(key: _warehouseIdKey, value: warehouseId),
+      if (staffName != null)
+        _storage.write(key: _staffNameKey, value: staffName),
+      if (warehouseName != null)
+        _storage.write(key: _warehouseNameKey, value: warehouseName),
     ]);
   }
 
@@ -67,6 +100,8 @@ class SecureStore {
       _storage.delete(key: _activationEmailKey),
       _storage.delete(key: _warehouseCodeKey),
       _storage.delete(key: _warehouseIdKey),
+      _storage.delete(key: _staffNameKey),
+      _storage.delete(key: _warehouseNameKey),
     ]);
   }
 }
