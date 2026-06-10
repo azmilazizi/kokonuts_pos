@@ -9,6 +9,7 @@ import '../models/pos_item.dart';
 import '../models/pos_modifier_group.dart';
 import '../services/cfd_settings_service.dart';
 import '../services/customer_service.dart';
+import 'duitnow_payment_dialog.dart';
 import '../services/bt_printer_service.dart';
 import '../services/label_printer_service.dart';
 import '../services/order_service.dart';
@@ -599,6 +600,23 @@ class _PosRegisterState extends State<PosRegister>
   }
 
   Future<void> _processPayment(String method) => _completePayment(method: method);
+
+  Future<void> _showDuitNowDialog() async {
+    final now = DateTime.now();
+    final ref =
+        'RCP-${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}'
+        '-${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}${now.second.toString().padLeft(2, '0')}';
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => DuitNowPaymentDialog(
+        amount: _total,
+        reference: ref,
+        onPaymentConfirmed: () => _processPayment('DuitNow QR'),
+      ),
+    );
+  }
 
   Future<void> _completePayment({
     required String method,
@@ -2545,7 +2563,13 @@ class _PosRegisterState extends State<PosRegister>
                         label: mode.name.toUpperCase(),
                         onPressed: _isProcessingPayment
                             ? null
-                            : () => _processPayment(mode.name),
+                            : () {
+                                if (mode.name == 'DuitNow QR') {
+                                  _showDuitNowDialog();
+                                } else {
+                                  _processPayment(mode.name);
+                                }
+                              },
                       ));
                       if (i < nonCash.length - 1) widgets.add(const SizedBox(height: 8));
                     }

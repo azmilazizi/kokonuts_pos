@@ -177,6 +177,22 @@
         </FrameLayout>
     </LinearLayout>
 
+    <!-- ── Full-screen DuitNow QR overlay (WebView renders CHIP-hosted QR page) ── -->
+    <LinearLayout
+        android:id="@+id/screenDuitNow"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:background="#FFFFFF"
+        android:visibility="gone">
+
+        <WebView
+            android:id="@+id/webViewDuitNow"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
+    </LinearLayout>
+
     <!-- ── Full-screen complete overlay (shown after payment, covers both columns) ── -->
     <LinearLayout
         android:id="@+id/screenComplete"
