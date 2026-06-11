@@ -1789,7 +1789,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 icon: const Icon(Icons.more_vert, color: Color(0xFF212121)),
                 tooltip: 'More options',
                 onSelected: (val) async {
-                  if (val == 'print' && detail != null) {
+                  if ((val == 'print' || val == 'print_cashback') && detail != null) {
                     final payment = detail.payments.isNotEmpty
                         ? detail.payments.first
                         : null;
@@ -1800,6 +1800,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         date: receipt.shortDatetime.split(' ').first,
                         time: receipt.formattedTime,
                         paymentMethod: receipt.paymentMethod,
+                        cashbackQrUrl: val == 'print_cashback' ? detail.cashbackQrUrl : null,
                         items: detail.lineItems
                             .map((item) => PrintItem(
                                   name: item.itemName,
@@ -1837,6 +1838,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         Icon(Icons.print, size: 20),
                         SizedBox(width: 12),
                         Text('Print Receipt'),
+                      ],
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: 'print_cashback',
+                    enabled: detail != null,
+                    child: const Row(
+                      children: [
+                        Icon(Icons.qr_code, size: 20),
+                        SizedBox(width: 12),
+                        Text('Print Receipt with Cashback'),
                       ],
                     ),
                   ),

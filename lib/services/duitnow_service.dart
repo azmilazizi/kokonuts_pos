@@ -1,7 +1,7 @@
-import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'dart:typed_data';
 
 import '../api/api_client.dart';
-import '../api/app_config.dart';
 
 class DuitNowResult {
   const DuitNowResult({
@@ -79,17 +79,28 @@ class DuitNowService {
     );
   }
 
-  // Calls CHIP directly to void/cancel an unpaid purchase.
-  Future<void> cancelPayment(String purchaseId) async {
-    final uri =
-        Uri.parse('https://gate.chip-in.asia/api/v1/purchases/$purchaseId/');
-    final client = http.Client();
-    try {
-      await client
-          .delete(uri)
-          .timeout(AppConfig.requestTimeout);
-    } finally {
-      client.close();
-    }
+  Future<Uint8List> fetchQrImage({
+    required String token,
+    required String purchaseId,
+  }) async {
+    final response = await _client.getJson(
+      '/pos/api/v1/duitnow/$purchaseId/qr_image',
+      authToken: token,
+    );
+    final data =
+        (response.data['data'] as Map<String, dynamic>?) ?? response.data;
+    final qrImage = data['qr_image'] as String;
+    return base64Decode(qrImage.split(',').last);
+  }
+
+  Future<void> cancelPayment({
+    required String token,
+    required String purchaseId,
+  }) async {
+    await _client.postJson(
+      '/pos/api/v1/duitnow/$purchaseId/cancel',
+      authToken: token,
+      body: {},
+    );
   }
 }

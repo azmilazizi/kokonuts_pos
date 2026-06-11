@@ -1,6 +1,5 @@
 package com.example.kokonuts_pos
 
-import android.annotation.SuppressLint
 import android.app.Presentation
 import android.content.Context
 import android.graphics.BitmapFactory
@@ -11,8 +10,6 @@ import android.os.Handler
 import android.os.Looper
 import android.view.Display
 import android.view.View
-import android.webkit.WebView
-import android.webkit.WebViewClient
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -93,9 +90,18 @@ class SunmiDisplayPlugin(private val context: Context) {
                     result.success(null)
                 }
                 "showDuitNowQr" -> {
-                    val url = call.arguments as? String ?: ""
+                    val args = call.arguments as? Map<String, Any>
+                    val bytes = args?.get("bytes") as? ByteArray
+                    val amount = (args?.get("amount") as? Number)?.toDouble() ?: 0.0
+                    if (bytes != null) {
+                        ensurePresentation()
+                        presentation?.showDuitNowQr(bytes, amount)
+                    }
+                    result.success(null)
+                }
+                "hideDuitNowQr" -> {
                     ensurePresentation()
-                    presentation?.showDuitNowQr(url)
+                    presentation?.hideDuitNowQr()
                     result.success(null)
                 }
                 "updatePromoImage" -> {
@@ -135,9 +141,10 @@ class CustomerPresentation(context: Context, display: Display) :
     private lateinit var screenWelcome: LinearLayout
     private lateinit var screenOrder: LinearLayout
     private lateinit var screenPayment: LinearLayout
-    private lateinit var screenDuitNow: LinearLayout
     private lateinit var screenComplete: LinearLayout
-    private lateinit var webViewDuitNow: WebView
+    private lateinit var llDuitNowLeft: LinearLayout
+    private lateinit var ivDuitNowQr: ImageView
+    private lateinit var tvDuitNowAmount: TextView
     private lateinit var itemsContainer: LinearLayout
     private lateinit var summaryContainer: LinearLayout
     private lateinit var summaryRows: LinearLayout
@@ -165,11 +172,10 @@ class CustomerPresentation(context: Context, display: Display) :
         screenWelcome = findViewById(R.id.screenWelcome)
         screenOrder = findViewById(R.id.screenOrder)
         screenPayment = findViewById(R.id.screenPayment)
-        screenDuitNow = findViewById(R.id.screenDuitNow)
         screenComplete = findViewById(R.id.screenComplete)
-
-        webViewDuitNow = findViewById(R.id.webViewDuitNow)
-        configureWebView(webViewDuitNow)
+        llDuitNowLeft = findViewById(R.id.llDuitNowLeft)
+        ivDuitNowQr = findViewById(R.id.ivDuitNowQr)
+        tvDuitNowAmount = findViewById(R.id.tvDuitNowAmount)
         itemsContainer = findViewById(R.id.itemsContainer)
         summaryContainer = findViewById(R.id.summaryContainer)
         summaryRows = findViewById(R.id.summaryRows)
@@ -194,11 +200,23 @@ class CustomerPresentation(context: Context, display: Display) :
 
     fun showWelcome() = switchTo(screenWelcome)
 
-    fun showDuitNowQr(url: String) {
-        switchTo(screenDuitNow)
-        Handler(Looper.getMainLooper()).post {
-            webViewDuitNow.loadUrl(url)
+    fun showDuitNowQr(bytes: ByteArray, amount: Double) {
+        // Show order ticket on the right, QR overlay on the left
+        twoColumnLayout.visibility = View.VISIBLE
+        screenComplete.visibility = View.GONE
+        screenWelcome.visibility = View.GONE
+        screenPayment.visibility = View.GONE
+        screenOrder.visibility = View.VISIBLE
+        llDuitNowLeft.visibility = View.VISIBLE
+        tvDuitNowAmount.text = "RM %.2f".format(amount)
+        clockHandler.post {
+            val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+            if (bmp != null) ivDuitNowQr.setImageBitmap(bmp)
         }
+    }
+
+    fun hideDuitNowQr() {
+        llDuitNowLeft.visibility = View.GONE
     }
 
     fun showPayment(total: Double) {
@@ -293,24 +311,13 @@ class CustomerPresentation(context: Context, display: Display) :
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private fun switchTo(screen: LinearLayout) {
+        llDuitNowLeft.visibility = View.GONE
         screenWelcome.visibility = View.GONE
         screenOrder.visibility = View.GONE
         screenPayment.visibility = View.GONE
-        screenDuitNow.visibility = View.GONE
         screenComplete.visibility = View.GONE
-        // Full-screen overlays hide the two-column layout
-        val isFullScreen = screen === screenComplete || screen === screenDuitNow
-        twoColumnLayout.visibility = if (isFullScreen) View.GONE else View.VISIBLE
+        twoColumnLayout.visibility = if (screen === screenComplete) View.GONE else View.VISIBLE
         screen.visibility = View.VISIBLE
-    }
-
-    @SuppressLint("SetJavaScriptEnabled")
-    private fun configureWebView(wv: WebView) {
-        wv.settings.javaScriptEnabled = true
-        wv.settings.domStorageEnabled = true
-        wv.settings.loadWithOverviewMode = true
-        wv.settings.useWideViewPort = true
-        wv.webViewClient = WebViewClient()
     }
 
     private fun updateClock() {

@@ -55,6 +55,18 @@ class ApiClient {
     return _decodeResponse(response);
   }
 
+  Future<ApiResponse> deleteJson(String path,
+      {Map<String, String>? headers, String? authToken}) async {
+    final uri = buildUri(path);
+    final response = await _client
+        .delete(
+          uri,
+          headers: _defaultHeaders(headers, authToken: authToken),
+        )
+        .timeout(AppConfig.requestTimeout);
+    return _decodeResponse(response);
+  }
+
   Future<ApiStatus> ping() async {
     final uri = buildUri('/');
     try {

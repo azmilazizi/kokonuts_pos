@@ -579,7 +579,7 @@ class _PosRegisterState extends State<PosRegister>
       _isPaymentMode = true;
       _showTicketPanel = false;
     });
-    SunmiDisplayService().showPayment(_total);
+    // CFD keeps showing the order (not just the amount) while the cashier selects payment method
   }
 
   Future<void> _processCashPayment() async {
@@ -723,8 +723,8 @@ class _PosRegisterState extends State<PosRegister>
         PrintReceiptData(
           receiptId: result.receiptNumber,
           queueNumber: result.queueNumber,
-          cashbackQrUrl: result.cashbackQrUrl,
-          cashbackQrToken: result.cashbackQrToken,
+          cashbackQrUrl: _selectedCustomer == null ? result.cashbackQrUrl : null,
+          cashbackQrToken: _selectedCustomer == null ? result.cashbackQrToken : null,
           date: date,
           time: time,
           paymentMethod: method,

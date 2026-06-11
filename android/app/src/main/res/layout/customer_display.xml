@@ -38,6 +38,42 @@
                     android:src="@drawable/flutter_logo"
                     android:alpha="0.55" />
             </LinearLayout>
+
+            <!-- DuitNow QR overlay: replaces promo image when QR payment is active -->
+            <LinearLayout
+                android:id="@+id/llDuitNowLeft"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:background="#FFFFFF"
+                android:visibility="gone"
+                android:padding="20dp">
+
+                <TextView
+                    android:id="@+id/tvDuitNowAmount"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textColor="#212121"
+                    android:textSize="32sp"
+                    android:textStyle="bold"
+                    android:paddingBottom="14dp" />
+
+                <ImageView
+                    android:id="@+id/ivDuitNowQr"
+                    android:layout_width="260dp"
+                    android:layout_height="260dp"
+                    android:scaleType="fitCenter" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Scan to Pay with DuitNow"
+                    android:textColor="#9E9E9E"
+                    android:textSize="13sp"
+                    android:paddingTop="14dp" />
+
+            </LinearLayout>
         </FrameLayout>
 
         <!-- ── Right panel: welcome / order / payment screens ── -->
@@ -175,22 +211,6 @@
             </LinearLayout>
 
         </FrameLayout>
-    </LinearLayout>
-
-    <!-- ── Full-screen DuitNow QR overlay (WebView renders CHIP-hosted QR page) ── -->
-    <LinearLayout
-        android:id="@+id/screenDuitNow"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:orientation="vertical"
-        android:background="#FFFFFF"
-        android:visibility="gone">
-
-        <WebView
-            android:id="@+id/webViewDuitNow"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent" />
-
     </LinearLayout>
 
     <!-- ── Full-screen complete overlay (shown after payment, covers both columns) ── -->

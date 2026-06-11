@@ -48,8 +48,12 @@ class SunmiDisplayService {
   Future<void> showComplete({double totalPaid = 0.0, int queueNumber = 0}) =>
       _invoke('showComplete', {'totalPaid': totalPaid, 'queueNumber': queueNumber});
 
-  /// Show the DuitNow QR hosted page on the customer display using a WebView.
-  Future<void> showDuitNowQr(String url) => _invoke('showDuitNowQr', url);
+  /// Show the DuitNow QR image on the left panel; order ticket stays on the right.
+  Future<void> showDuitNowQr(Uint8List bytes, double amount) =>
+      _invoke('showDuitNowQr', {'bytes': bytes, 'amount': amount});
+
+  /// Hide the DuitNow QR overlay, restoring the promo image on the left panel.
+  Future<void> hideDuitNowQr() => _invoke('hideDuitNowQr');
 
   /// Load a promotional image on the left panel from [imageUrl].
   /// Pass null or an empty string to revert to the orange placeholder.

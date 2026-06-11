@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
@@ -29,6 +30,8 @@ class _DuitNowPaymentDialogState extends State<DuitNowPaymentDialog> {
   _DuitNowState _state = _DuitNowState.loading;
   String? _purchaseId;
   String? _errorMessage;
+  String _token = '';
+  Uint8List? _qrBytes;
   Timer? _pollTimer;
   bool _cancelling = false;
 
@@ -46,17 +49,24 @@ class _DuitNowPaymentDialogState extends State<DuitNowPaymentDialog> {
 
   Future<void> _createPayment() async {
     try {
-      final token = await const SecureStore().readToken() ?? '';
+      _token = await const SecureStore().readToken() ?? '';
       final result = await _service.createPayment(
-        token: token,
+        token: _token,
         amount: widget.amount,
         reference: widget.reference,
       );
       _purchaseId = result.purchaseId;
-      await SunmiDisplayService().showDuitNowQr(result.qrUrl);
+      final qrBytes = await _service.fetchQrImage(
+        token: _token,
+        purchaseId: result.purchaseId,
+      );
+      await SunmiDisplayService().showDuitNowQr(qrBytes, widget.amount);
       if (!mounted) return;
-      setState(() => _state = _DuitNowState.waiting);
-      _startPolling(token);
+      setState(() {
+        _qrBytes = qrBytes;
+        _state = _DuitNowState.waiting;
+      });
+      _startPolling(_token);
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -97,11 +107,14 @@ class _DuitNowPaymentDialogState extends State<DuitNowPaymentDialog> {
     _pollTimer?.cancel();
     if (_purchaseId != null) {
       try {
-        await _service.cancelPayment(_purchaseId!);
+        await _service.cancelPayment(
+          token: _token,
+          purchaseId: _purchaseId!,
+        );
       } catch (_) {}
     }
-    // Restore standard payment amount screen on CFD
-    await SunmiDisplayService().showPayment(widget.amount);
+    // Restore order display on CFD (hide QR overlay)
+    await SunmiDisplayService().hideDuitNowQr();
     if (mounted) Navigator.of(context).pop();
   }
 
@@ -110,10 +123,14 @@ class _DuitNowPaymentDialogState extends State<DuitNowPaymentDialog> {
     return PopScope(
       canPop: false,
       child: Dialog(
+        backgroundColor: Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 36),
-          child: _buildContent(),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
+        child: IntrinsicWidth(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 36),
+            child: _buildContent(),
+          ),
         ),
       ),
     );
@@ -138,7 +155,14 @@ class _DuitNowPaymentDialogState extends State<DuitNowPaymentDialog> {
         return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.qr_code_2, size: 64, color: Color(0xFFE67E22)),
+            if (_qrBytes != null)
+              Image.memory(_qrBytes!, width: 264, height: 264)
+            else
+              const SizedBox(
+                width: 264,
+                height: 264,
+                child: Center(child: CircularProgressIndicator()),
+              ),
             const SizedBox(height: 16),
             const Text(
               'DuitNow QR',
