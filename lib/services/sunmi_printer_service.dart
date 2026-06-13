@@ -46,7 +46,10 @@ class SunmiPrinterService {
   //   anything else        → USB path; receipt printing not yet supported, skip
   Future<void> _routeReceiptCommands(List<ReceiptCmd> commands) async {
     final mac = await PrinterConfigService().getReceiptPrinterMac();
-    if (mac == null) return;
+    if (mac == null || mac == PrinterConfigService.kSunmiKey) {
+      await _printEscPos(commands);
+      return;
+    }
     if (_isBtMac(mac)) {
       await BtPrinterService().printCommands(mac, commands);
     }

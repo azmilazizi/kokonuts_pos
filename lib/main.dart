@@ -1801,6 +1801,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         time: receipt.formattedTime,
                         paymentMethod: receipt.paymentMethod,
                         cashbackQrUrl: val == 'print_cashback' ? detail.cashbackQrUrl : null,
+                        cashbackQrToken: val == 'print_cashback' ? detail.cashbackQrToken : null,
                         items: detail.lineItems
                             .map((item) => PrintItem(
                                   name: item.itemName,

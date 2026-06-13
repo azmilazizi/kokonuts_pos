@@ -158,6 +158,7 @@ class ReceiptDetail {
     required this.payments,
     this.queueNumber,
     this.cashbackQrUrl,
+    this.cashbackQrToken,
   });
 
   final int id;
@@ -167,6 +168,7 @@ class ReceiptDetail {
   final List<ReceiptPayment> payments;
   final int? queueNumber;
   final String? cashbackQrUrl;
+  final String? cashbackQrToken;
 
   static ReceiptDetail? fromJson(Map<String, dynamic> json) {
     final rawItems = json['line_items'];
@@ -191,6 +193,7 @@ class ReceiptDetail {
       payments: payments,
       queueNumber: int.tryParse(json['queue_number']?.toString() ?? ''),
       cashbackQrUrl: json['cashback_qr_url']?.toString(),
+      cashbackQrToken: json['cashback_qr_token']?.toString(),
     );
   }
 }

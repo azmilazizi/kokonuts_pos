@@ -6,7 +6,7 @@ List<ReceiptCmd> buildReceipt(
   PrintReceiptData data,
   StoreConfig store,
 ) {
-  final cashbackUrl = data.cashbackQrUrl;
+  final cashbackUrl = data.cashbackQrUrl ?? data.cashbackQrToken;
   return [
     // ── Store header ──────────────────────────────────────────────────────────
     if (store.logoBytes != null)
