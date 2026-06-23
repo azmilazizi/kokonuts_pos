@@ -1,5 +1,21 @@
 import '../api/api_client.dart';
 
+/// Human-readable delivery platform name for a raw `source` value (e.g.
+/// "GRABFOOD" → "GrabFood"), or '' if [source] is empty (walk-in order).
+String deliverySourceLabel(String source) {
+  switch (source.toUpperCase()) {
+    case 'GRABFOOD':
+      return 'GrabFood';
+    case 'FOODPANDA':
+      return 'foodpanda';
+    case 'SHOPEEFOOD':
+      return 'ShopeeFood';
+    default:
+      if (source.isEmpty) return '';
+      return source[0].toUpperCase() + source.substring(1).toLowerCase();
+  }
+}
+
 // ─── List model ──────────────────────────────────────────────────────────────
 
 class ReceiptSummary {
@@ -16,6 +32,9 @@ class ReceiptSummary {
     required this.totalMoney,
     required this.paymentMethod,
     required this.paymentType,
+    this.source = '',
+    this.queueNumber,
+    this.shortOrderNumber,
   });
 
   final int id;
@@ -30,6 +49,14 @@ class ReceiptSummary {
   final double totalMoney;
   final String paymentMethod;
   final String paymentType;
+  final String? queueNumber;
+  final String? shortOrderNumber;
+  /// Delivery platform origin (e.g. "GRABFOOD"), empty for walk-in orders.
+  final String source;
+
+  /// Human-readable delivery platform name for badges, or '' if not a
+  /// delivery order.
+  String get sourceLabel => deliverySourceLabel(source);
 
   String get formattedTotal => 'RM${totalMoney.toStringAsFixed(2)}';
 
@@ -77,6 +104,9 @@ class ReceiptSummary {
       totalMoney: double.tryParse(json['total_money']?.toString() ?? '') ?? 0.0,
       paymentMethod: json['payment_method']?.toString() ?? '',
       paymentType: json['payment_type']?.toString() ?? '',
+      source: json['source']?.toString() ?? '',
+      queueNumber: json['queue_number']?.toString(),
+      shortOrderNumber: json['short_order_number']?.toString(),
     );
   }
 }
@@ -159,6 +189,10 @@ class ReceiptDetail {
     this.queueNumber,
     this.cashbackQrUrl,
     this.cashbackQrToken,
+    this.subtotal = 0.0,
+    this.totalDiscount = 0.0,
+    this.deliveryFee = 0.0,
+    this.grabfoodDeliveryFee = 0.0,
   });
 
   final int id;
@@ -166,9 +200,13 @@ class ReceiptDetail {
   final String status;
   final List<ReceiptLineItem> lineItems;
   final List<ReceiptPayment> payments;
-  final int? queueNumber;
+  final String? queueNumber;
   final String? cashbackQrUrl;
   final String? cashbackQrToken;
+  final double subtotal;
+  final double totalDiscount;
+  final double deliveryFee;
+  final double grabfoodDeliveryFee;
 
   static ReceiptDetail? fromJson(Map<String, dynamic> json) {
     final rawItems = json['line_items'];
@@ -191,9 +229,17 @@ class ReceiptDetail {
       status: json['status']?.toString() ?? '',
       lineItems: items,
       payments: payments,
-      queueNumber: int.tryParse(json['queue_number']?.toString() ?? ''),
+      queueNumber: json['queue_number']?.toString(),
       cashbackQrUrl: json['cashback_qr_url']?.toString(),
       cashbackQrToken: json['cashback_qr_token']?.toString(),
+      subtotal: double.tryParse(json['subtotal']?.toString() ?? '') ?? 0.0,
+      totalDiscount: double.tryParse(json['total_discount']?.toString() ?? '') ?? 0.0,
+      deliveryFee: double.tryParse(json['delivery_fee']?.toString() ?? '') ?? 0.0,
+      grabfoodDeliveryFee: double.tryParse(
+            ((json['grabfood_price'] as Map<String, dynamic>?)?['delivery_fee'])
+                ?.toString() ??
+                '') ??
+          0.0,
     );
   }
 }

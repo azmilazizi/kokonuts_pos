@@ -42,6 +42,24 @@ class ApiClient {
     return _decodeResponse(response);
   }
 
+  Future<ApiResponse> postForm(String path,
+      {Map<String, String>? fields,
+      Map<String, String>? headers,
+      String? authToken}) async {
+    final uri = buildUri(path);
+    final response = await _client
+        .post(
+          uri,
+          headers: {
+            ..._defaultHeaders(headers, authToken: authToken),
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: fields,
+        )
+        .timeout(AppConfig.requestTimeout);
+    return _decodeResponse(response);
+  }
+
   Future<ApiResponse> patchJson(String path,
       {Object? body, Map<String, String>? headers, String? authToken}) async {
     final uri = buildUri(path);

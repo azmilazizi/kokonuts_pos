@@ -45,7 +45,7 @@ class SunmiDisplayService {
 
   Future<void> showPayment(double total) => _invoke('showPayment', total);
 
-  Future<void> showComplete({double totalPaid = 0.0, int queueNumber = 0}) =>
+  Future<void> showComplete({double totalPaid = 0.0, String queueNumber = ''}) =>
       _invoke('showComplete', {'totalPaid': totalPaid, 'queueNumber': queueNumber});
 
   /// Show the DuitNow QR image on the left panel; order ticket stays on the right.

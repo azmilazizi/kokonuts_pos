@@ -35,7 +35,7 @@ class PendingOrder {
   final double total;
   final double cashReceived;
   final double changeAmount;
-  final int queueNumber;
+  final String queueNumber;
   final List<OrderItem> items;
   final int? cashbackCustomerId;
   final double cashbackAmount;
@@ -107,7 +107,7 @@ class OrderQueue {
     );
   }
 
-  Future<int?> getQueueNumberForReceipt(String receiptNumber) async {
+  Future<String?> getQueueNumberForReceipt(String receiptNumber) async {
     final db = await LocalDb.instance.db;
     final rows = await db.query(
       'pending_orders',
@@ -117,7 +117,7 @@ class OrderQueue {
       limit: 1,
     );
     if (rows.isEmpty) return null;
-    return rows.first['queue_number'] as int?;
+    return rows.first['queue_number']?.toString();
   }
 
   Future<void> markFailed(int id, String error) async {
@@ -177,7 +177,7 @@ class OrderQueue {
       total: (row['total'] as num).toDouble(),
       cashReceived: (row['cash_received'] as num).toDouble(),
       changeAmount: (row['change_amount'] as num).toDouble(),
-      queueNumber: row['queue_number'] as int,
+      queueNumber: row['queue_number']?.toString() ?? '',
       items: items,
       cashbackCustomerId: row['cashback_customer_id'] as int?,
       cashbackAmount: (row['cashback_amount'] as num?)?.toDouble() ?? 0.0,

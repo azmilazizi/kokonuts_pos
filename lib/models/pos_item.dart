@@ -36,7 +36,9 @@ class PosItem {
     return PosItem(
       id: json['id']?.toString() ?? '',
       name: name,
-      price: double.tryParse(json['rate']?.toString() ?? '') ?? 0.0,
+      price: double.tryParse(json['effective_price']?.toString() ?? '') ??
+          double.tryParse(json['rate']?.toString() ?? '') ??
+          0.0,
       groupId: json['sub_group']?.toString() ?? '0',
       barcode: json['commodity_barcode']?.toString() ?? '',
       skuCode: json['sku_code']?.toString() ?? '',

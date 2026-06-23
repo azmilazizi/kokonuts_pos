@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../api/api_exception.dart';
 import '../models/pos_customer.dart';
 import '../models/pos_group.dart';
@@ -169,7 +170,7 @@ class _PosRegisterState extends State<PosRegister>
   String _lastReceiptDate = '';
   String _lastReceiptTime = '';
   String _lastReceiptMethod = '';
-  int _lastQueueNumber = 0;
+  String _lastQueueNumber = '';
   final TextEditingController _emailController = TextEditingController();
   PosCustomer? _selectedCustomer;
 
@@ -574,7 +575,7 @@ class _PosRegisterState extends State<PosRegister>
 
   void _handleCharge() {
     if (_cart.isEmpty) return;
-    _cashController.text = _total.toStringAsFixed(2);
+    _cashController.text = '0.00';
     setState(() {
       _isPaymentMode = true;
       _showTicketPanel = false;
@@ -1065,7 +1066,7 @@ class _PosRegisterState extends State<PosRegister>
   static bool _isBtMac(String mac) =>
       RegExp(r'^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$').hasMatch(mac);
 
-  Future<void> _printLabels(int queueNumber) async {
+  Future<void> _printLabels(String queueNumber) async {
     final kitchenMac = await PrinterConfigService().getKitchenPrinterMac();
     if (kitchenMac == null || kitchenMac.isEmpty) return;
 
@@ -1086,7 +1087,7 @@ class _PosRegisterState extends State<PosRegister>
     if (_isBtMac(kitchenMac)) {
       try {
         final commands = buildKitchenTicket(
-          queueNumber: queueNumber,
+          queueLabel: queueNumber,
           dateTime: dt,
           items: kitchenItems,
         );
@@ -2231,7 +2232,7 @@ class _PosRegisterState extends State<PosRegister>
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '$_lastQueueNumber',
+                        _lastQueueNumber,
                         style: const TextStyle(
                           fontSize: 64,
                           fontWeight: FontWeight.w800,
@@ -2374,7 +2375,7 @@ class _PosRegisterState extends State<PosRegister>
                   _billDiscountIsPercent = false;
                   _redeemCashback = false;
                   _selectedCustomer = null;
-                  _cashController.clear();
+                  _cashController.text = '0.00';
                 });
               },
               style: ElevatedButton.styleFrom(
@@ -2482,9 +2483,8 @@ class _PosRegisterState extends State<PosRegister>
                       Expanded(
                         child: TextField(
                           controller: _cashController,
-                          keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true,
-                          ),
+                          keyboardType: TextInputType.number,
+                          inputFormatters: [_CashInputFormatter()],
                           style: const TextStyle(fontSize: 16),
                           decoration: const InputDecoration(
                             prefixIcon: Icon(Icons.money_outlined),
@@ -2907,8 +2907,8 @@ class _ModifierModalState extends State<_ModifierModal> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     _buildItemDiscount(),
-                    ...widget.product.modifierGroups.map(_buildGroup),
                     _buildQuantity(),
+                    ...widget.product.modifierGroups.map(_buildGroup),
                   ],
                 ),
               ),
@@ -3432,6 +3432,24 @@ class _CustomerSearchModalState extends State<_CustomerSearchModal> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Calculator-style cash input: digits fill from the right, decimal fixed at 2 places.
+/// e.g. typing 1 → "0.01", then 5 → "0.15", then 0 → "1.50"
+class _CashInputFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final digits = newValue.text.replaceAll(RegExp(r'[^\d]'), '');
+    final cents = int.tryParse(digits) ?? 0;
+    final formatted = (cents / 100).toStringAsFixed(2);
+    return TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
     );
   }
 }

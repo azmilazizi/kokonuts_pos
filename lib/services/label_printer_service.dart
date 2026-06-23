@@ -18,7 +18,7 @@ class LabelPrintJob {
     required this.totalItems,
   });
 
-  final int queueNumber;
+  final String queueNumber;
   final String itemName;
   final String category;
 

@@ -27,14 +27,21 @@ class PrintReceiptData {
     required this.items,
     required this.total,
     this.queueNumber,
+    this.collectionLabel,
     this.cashbackQrUrl,
     this.cashbackQrToken,
     this.cashReceived = 0.0,
     this.change = 0.0,
+    this.subtotal = 0.0,
+    this.discount = 0.0,
+    this.deliveryFee = 0.0,
   });
 
   final String receiptId;
-  final int? queueNumber;
+  final String? queueNumber;
+  /// Overrides the printed collection number display (e.g. an alphanumeric
+  /// delivery collection code) in place of [queueNumber].
+  final String? collectionLabel;
   final String? cashbackQrUrl;
   final String? cashbackQrToken;
   final String date;
@@ -44,6 +51,9 @@ class PrintReceiptData {
   final double total;
   final double cashReceived;
   final double change;
+  final double subtotal;
+  final double discount;
+  final double deliveryFee;
 }
 
 class StoreConfig {

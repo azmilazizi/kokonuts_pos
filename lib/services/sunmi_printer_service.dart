@@ -21,12 +21,19 @@ class SunmiPrinterService {
 
   Future<void> printReceipt(PrintReceiptData data) async {
     try {
-      final store = await StoreConfigService().getConfig();
-      final commands = buildReceipt(data, store);
-      await _routeReceiptCommands(commands);
+      await printReceiptOrThrow(data);
     } on PlatformException {
       // No-op on non-Sunmi hardware.
     } catch (_) {}
+  }
+
+  /// Same as [printReceipt] but propagates failures instead of swallowing
+  /// them, so callers that need to know whether the print actually
+  /// succeeded (e.g. delivery print jobs) can react accordingly.
+  Future<void> printReceiptOrThrow(PrintReceiptData data) async {
+    final store = await StoreConfigService().getConfig();
+    final commands = buildReceipt(data, store);
+    await _routeReceiptCommands(commands);
   }
 
   Future<void> printTestReceipt() async {
@@ -71,13 +78,13 @@ class SunmiPrinterService {
   }
 
   Future<void> printKitchenTicket({
-    required int queueNumber,
+    required String queueNumber,
     required String dateTime,
     required List<({String name, int qty, String modifiers})> items,
   }) async {
     try {
       final commands = buildKitchenTicket(
-        queueNumber: queueNumber,
+        queueLabel: queueNumber,
         dateTime: dateTime,
         items: items,
       );

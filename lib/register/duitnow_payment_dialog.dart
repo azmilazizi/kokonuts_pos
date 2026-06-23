@@ -77,8 +77,7 @@ class _DuitNowPaymentDialogState extends State<DuitNowPaymentDialog> {
   }
 
   void _startPolling(String token) {
-    _pollTimer =
-        Timer.periodic(const Duration(milliseconds: 2500), (_) async {
+    _pollTimer = Timer.periodic(const Duration(milliseconds: 2500), (_) async {
       if (_purchaseId == null) return;
       try {
         final status = await _service.pollStatus(
@@ -107,10 +106,7 @@ class _DuitNowPaymentDialogState extends State<DuitNowPaymentDialog> {
     _pollTimer?.cancel();
     if (_purchaseId != null) {
       try {
-        await _service.cancelPayment(
-          token: _token,
-          purchaseId: _purchaseId!,
-        );
+        await _service.cancelPayment(token: _token, purchaseId: _purchaseId!);
       } catch (_) {}
     }
     // Restore order display on CFD (hide QR overlay)
@@ -144,10 +140,7 @@ class _DuitNowPaymentDialogState extends State<DuitNowPaymentDialog> {
           children: [
             CircularProgressIndicator(),
             SizedBox(height: 20),
-            Text(
-              'Preparing DuitNow QR...',
-              style: TextStyle(fontSize: 16),
-            ),
+            Text('Preparing DuitNow QR...', style: TextStyle(fontSize: 16)),
           ],
         );
 
@@ -177,26 +170,29 @@ class _DuitNowPaymentDialogState extends State<DuitNowPaymentDialog> {
                 color: Color(0xFFE67E22),
               ),
             ),
-            const SizedBox(height: 20),
-            const Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-                SizedBox(width: 12),
-                Text(
-                  'Waiting for customer to scan...',
-                  style: TextStyle(color: Colors.grey),
-                ),
-              ],
-            ),
+            if (MediaQuery.of(context).size.width >= 700) ...[
+              const SizedBox(height: 20),
+              const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                  SizedBox(width: 12),
+                  Text(
+                    'Waiting for customer to scan...',
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                ],
+              ),
+            ],
             const SizedBox(height: 6),
             const Text(
               'QR code is shown on the customer display',
               style: TextStyle(fontSize: 12, color: Colors.grey),
+              textAlign: TextAlign.center,
             ),
             const SizedBox(height: 28),
             OutlinedButton.icon(
@@ -206,15 +202,19 @@ class _DuitNowPaymentDialogState extends State<DuitNowPaymentDialog> {
                       width: 14,
                       height: 14,
                       child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.red),
+                        strokeWidth: 2,
+                        color: Colors.red,
+                      ),
                     )
                   : const Icon(Icons.cancel_outlined, color: Colors.red),
               label: const Text('Cancel Payment'),
               style: OutlinedButton.styleFrom(
                 foregroundColor: Colors.red,
                 side: const BorderSide(color: Colors.red),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 12,
+                ),
               ),
             ),
           ],
@@ -231,10 +231,7 @@ class _DuitNowPaymentDialogState extends State<DuitNowPaymentDialog> {
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             SizedBox(height: 8),
-            Text(
-              'Processing order...',
-              style: TextStyle(color: Colors.grey),
-            ),
+            Text('Processing order...', style: TextStyle(color: Colors.grey)),
           ],
         );
 

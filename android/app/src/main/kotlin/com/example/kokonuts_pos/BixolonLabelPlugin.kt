@@ -83,7 +83,7 @@ class BixolonLabelPlugin(private val context: Context) {
                     }
                     printHandler.post {
                         printLabel(
-                            queueNumber = (args["queueNumber"] as? Int) ?: 0,
+                            queueNumber = (args["queueNumber"] as? String) ?: "",
                             name        = args["name"]     as? String ?: "",
                             category    = args["category"] as? String ?: "",
                             modifier    = args["modifier"] as? String ?: "",
@@ -157,7 +157,7 @@ class BixolonLabelPlugin(private val context: Context) {
      *   └────────────────────────────────────┘  (240 dots / 30 mm tall)
      */
     private fun printLabel(
-        queueNumber: Int,
+        queueNumber: String,
         name: String,
         category: String,
         modifier: String,
@@ -207,7 +207,7 @@ class BixolonLabelPlugin(private val context: Context) {
                 }
             }
 
-            drawLine(queueNumber.toString())
+            drawLine(queueNumber)
             wrapText(name, MAX_LINE_CHARS).forEach { drawLine(it) }
             if (modifier.isNotEmpty()) {
                 modifier.split("\n").forEach { mod ->

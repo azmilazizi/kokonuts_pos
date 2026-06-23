@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class SecureStore {
@@ -15,36 +16,36 @@ class SecureStore {
 
   final FlutterSecureStorage _storage;
 
-  Future<String?> readToken() {
-    return _storage.read(key: _tokenKey);
+  // Android Keystore can get out of sync after reinstalls, producing a
+  // BadPaddingException. Wipe all storage so the app recovers cleanly.
+  Future<String?> _safeRead(String key) async {
+    try {
+      return await _storage.read(key: key);
+    } on PlatformException catch (e) {
+      if (e.message?.contains('BadPaddingException') == true ||
+          e.message?.contains('BAD_DECRYPT') == true) {
+        await _storage.deleteAll();
+      }
+      return null;
+    }
   }
 
-  Future<String?> readStaffId() {
-    return _storage.read(key: _staffIdKey);
-  }
+  Future<String?> readToken() => _safeRead(_tokenKey);
 
-  Future<String?> readStaffName() {
-    return _storage.read(key: _staffNameKey);
-  }
+  Future<String?> readStaffId() => _safeRead(_staffIdKey);
 
-  Future<String?> readActivationEmail() {
-    return _storage.read(key: _activationEmailKey);
-  }
+  Future<String?> readStaffName() => _safeRead(_staffNameKey);
 
-  Future<String?> readWarehouseCode() {
-    return _storage.read(key: _warehouseCodeKey);
-  }
+  Future<String?> readActivationEmail() => _safeRead(_activationEmailKey);
 
-  Future<String?> readWarehouseId() {
-    return _storage.read(key: _warehouseIdKey);
-  }
+  Future<String?> readWarehouseCode() => _safeRead(_warehouseCodeKey);
 
-  Future<String?> readWarehouseName() {
-    return _storage.read(key: _warehouseNameKey);
-  }
+  Future<String?> readWarehouseId() => _safeRead(_warehouseIdKey);
+
+  Future<String?> readWarehouseName() => _safeRead(_warehouseNameKey);
 
   Future<int?> readQueueNumber() async {
-    final v = await _storage.read(key: _queueNumberKey);
+    final v = await _safeRead(_queueNumberKey);
     return v != null ? int.tryParse(v) : null;
   }
 
@@ -52,11 +53,11 @@ class SecureStore {
     return _storage.write(key: _queueNumberKey, value: number.toString());
   }
 
-  Future<int> nextQueueNumber() async {
+  Future<String> nextQueueNumber() async {
     final stored = await readQueueNumber();
     final next = (stored == null || stored >= 399) ? 300 : stored + 1;
     await writeQueueNumber(next);
-    return next;
+    return next.toString();
   }
 
   Future<void> writeAuth({

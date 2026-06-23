@@ -35,7 +35,8 @@ List<ReceiptCmd> buildReceipt(
     // ── Collection number ─────────────────────────────────────────────────────
     RcText('Your collection #:', align: ReceiptAlign.center),
     RcText(
-      data.queueNumber != null ? '${data.queueNumber}' : data.receiptId,
+      data.collectionLabel ??
+          (data.queueNumber ?? data.receiptId),
       align: ReceiptAlign.center,
       bold: true,
       large: true,
@@ -67,6 +68,17 @@ List<ReceiptCmd> buildReceipt(
       for (final mod in item.modifiers) RcText('  $mod', small: true),
     ],
     const RcDivider(),
+    if (data.discount > 0 || data.deliveryFee > 0) ...[
+      RcRow('Subtotal', 'RM ${data.subtotal.toStringAsFixed(2)}',
+          rightAlignLabel: true),
+      if (data.discount > 0)
+        RcRow('Discount', '-RM ${data.discount.toStringAsFixed(2)}',
+            rightAlignLabel: true),
+      if (data.deliveryFee > 0)
+        RcRow('Delivery Fee', 'RM ${data.deliveryFee.toStringAsFixed(2)}',
+            rightAlignLabel: true),
+      const RcDivider(),
+    ],
     RcRow('TOTAL', 'RM ${data.total.toStringAsFixed(2)}',
         bold: true, rightAlignLabel: true),
     const RcDivider(),
@@ -97,7 +109,7 @@ List<ReceiptCmd> buildReceipt(
 }
 
 List<ReceiptCmd> buildKitchenTicket({
-  required int queueNumber,
+  required String queueLabel,
   required String dateTime,
   required List<({String name, int qty, String modifiers})> items,
 }) {
@@ -105,7 +117,7 @@ List<ReceiptCmd> buildKitchenTicket({
     RcText('KITCHEN ORDER', align: ReceiptAlign.center, bold: true, large: true),
     RcText(dateTime, align: ReceiptAlign.center, small: true),
     RcDivider(),
-    RcText('Queue #$queueNumber', align: ReceiptAlign.center, bold: true, large: true),
+    RcText('Queue #$queueLabel', align: ReceiptAlign.center, bold: true, large: true),
     RcDivider(),
     for (final item in items) ...[
       RcRow('${item.qty}x  ${item.name}', '', bold: true),

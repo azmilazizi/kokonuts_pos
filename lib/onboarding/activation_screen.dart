@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../api/api_client.dart';
 import '../api/api_exception.dart';
 import '../storage/secure_store.dart';
@@ -55,6 +56,7 @@ class _ActivationScreenState extends State<ActivationScreen> {
       final access = (data['access'] as List<dynamic>)[0] as Map<String, dynamic>;
       final warehouse = access['warehouse'] as Map<String, dynamic>;
 
+      final prefs = await SharedPreferences.getInstance();
       await Future.wait([
         _secureStore.writeAuth(
           token: access['token'] as String,
@@ -67,6 +69,9 @@ class _ActivationScreenState extends State<ActivationScreen> {
           staffName: staff['full_name'] as String,
           warehouseName: warehouse['name'] as String,
         ),
+        prefs.remove('shift_is_open'),
+        prefs.remove('shift_id'),
+        prefs.remove('shift_opened_at'),
       ]);
 
       widget.onActivated();

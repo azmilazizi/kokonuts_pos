@@ -11,7 +11,7 @@ class OrderResult {
 
   final int receiptId;
   final String receiptNumber;
-  final int queueNumber;
+  final String queueNumber;
   final String? cashbackQrUrl;
   final String? cashbackQrToken;
 }
@@ -73,7 +73,7 @@ class OrderService {
     required double cashReceived,
     required double change,
     required List<OrderItem> items,
-    required int queueNumber,
+    required String queueNumber,
   }) async {
     final (typeId, typeName) =
         _paymentTypeMap[paymentMethod] ?? (1, paymentMethod);
@@ -132,7 +132,9 @@ class OrderService {
         (response.data['data'] as Map<String, dynamic>?) ?? response.data;
     final rawId = data['receipt_id'];
     return OrderResult(
-      receiptId: rawId is int ? rawId : int.tryParse(rawId?.toString() ?? '') ?? 0,
+      receiptId: rawId is int
+          ? rawId
+          : int.tryParse(rawId?.toString() ?? '') ?? 0,
       receiptNumber: data['receipt_number']?.toString() ?? '',
       queueNumber: queueNumber,
       cashbackQrUrl: data['cashback_qr_url']?.toString(),

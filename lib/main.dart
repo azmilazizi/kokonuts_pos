@@ -13,8 +13,10 @@ import 'models/pos_item.dart';
 import 'models/pos_modifier_group.dart';
 import 'register/pos_register.dart';
 import 'register/syncing_screen.dart';
+import 'services/delivery_print_job_poller.dart';
 import 'services/items_service.dart';
 import 'services/payment_mode_service.dart';
+import 'services/print_job_service.dart';
 import 'services/sunmi_printer_service.dart';
 import 'services/sync_service.dart';
 import 'settings/settings_screen.dart';
@@ -344,6 +346,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final Map<String, String> _receiptReasons = {};
   String? _pendingRefundReason;
 
+  // Delivery (GrabFood/foodpanda/ShopeeFood) print job polling.
+  final _deliveryPoller = DeliveryPrintJobPoller();
+
   static const List<_SidebarDestination> _destinations = [
     _SidebarDestination(
       label: 'Register',
@@ -407,13 +412,51 @@ class _RegisterScreenState extends State<RegisterScreen> {
     _loadWarehouseDetails();
     _loadShiftState();
     _receiptSearchController.addListener(_onReceiptSearchChanged);
+    _deliveryPoller.start(
+      tokenProvider: () => _secureStore.readToken(),
+      onFailure: _handleDeliveryPrintFailure,
+      onKitchenWarning: _handleDeliveryKitchenWarning,
+    );
   }
 
   @override
   void dispose() {
     _searchDebounce?.cancel();
     _receiptSearchController.dispose();
+    _deliveryPoller.dispose();
     super.dispose();
+  }
+
+  void _handleDeliveryPrintFailure(PrintJob job, String error) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showMaterialBanner(
+      MaterialBanner(
+        content: Text(
+          '${job.sourceLabel} order ${job.receiptNumber} failed to print. '
+          'Please print manually from Transactions.',
+        ),
+        leading: const Icon(Icons.error_outline, color: Colors.red),
+        actions: [
+          TextButton(
+            onPressed: () =>
+                ScaffoldMessenger.of(context).hideCurrentMaterialBanner(),
+            child: const Text('Dismiss'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _handleDeliveryKitchenWarning(PrintJob job, String error) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Kitchen ticket failed for ${job.receiptNumber} — send manually '
+          'from Transactions.',
+        ),
+      ),
+    );
   }
 
   void _onReceiptSearchChanged() {
@@ -498,6 +541,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
       });
     }
 
+    // Whether this device already believes it has an open shift.
+    // Used below to guard against a multi-device bug: all devices share the
+    // same auth token, so /shifts/current reflects the account-wide "current"
+    // shift. If another device closes its shift, /shifts/current returns null
+    // for everyone — which must NOT be mistaken for our own shift being closed.
+    final hadLocalShift = cachedOpen && cachedId != null;
+
     // Verify with API and reconcile.
     try {
       final token = await _secureStore.readToken();
@@ -509,22 +559,33 @@ class _RegisterScreenState extends State<RegisterScreen> {
       final data = rawData as Map<String, dynamic>?;
 
       if (data == null || data['id'] == null) {
-        // Server returned 200 but no active shift.
-        await prefs.setBool('shift_is_open', false);
-        await prefs.remove('shift_id');
-        await prefs.remove('shift_opened_at');
-        if (mounted) {
-          setState(() {
-            _shiftOpen = false;
-            _shiftId = null;
-            _shiftOpenedAt = null;
-          });
+        // Server has no active shift. Only clear our state if we didn't
+        // already have a shift open — another device may have just closed its
+        // own shift, which should not affect ours.
+        if (!hadLocalShift) {
+          await prefs.setBool('shift_is_open', false);
+          await prefs.remove('shift_id');
+          await prefs.remove('shift_opened_at');
+          if (mounted) {
+            setState(() {
+              _shiftOpen = false;
+              _shiftId = null;
+              _shiftOpenedAt = null;
+            });
+          }
         }
       } else {
         final shiftId = data['id']?.toString();
         final openedAtRaw = data['opened_at']?.toString();
         final openedAt =
             openedAtRaw != null ? DateTime.tryParse(openedAtRaw) : null;
+
+        // If we already have a locally-cached shift that differs from what the
+        // server returned, the server shift belongs to another device on the
+        // same account. Keep our own local state and ignore the foreign shift.
+        if (hadLocalShift && shiftId != cachedId) {
+          return;
+        }
 
         await prefs.setBool('shift_is_open', true);
         if (shiftId != null) await prefs.setString('shift_id', shiftId);
@@ -542,16 +603,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
       }
     } on ApiException catch (e) {
       if (e.statusCode == 404) {
-        // No active shift on the server.
-        await prefs.setBool('shift_is_open', false);
-        await prefs.remove('shift_id');
-        await prefs.remove('shift_opened_at');
-        if (mounted) {
-          setState(() {
-            _shiftOpen = false;
-            _shiftId = null;
-            _shiftOpenedAt = null;
-          });
+        // Server has no active shift. Same guard as above — don't clear our
+        // local shift state if we believed one was open on this device.
+        if (!hadLocalShift) {
+          await prefs.setBool('shift_is_open', false);
+          await prefs.remove('shift_id');
+          await prefs.remove('shift_opened_at');
+          if (mounted) {
+            setState(() {
+              _shiftOpen = false;
+              _shiftId = null;
+              _shiftOpenedAt = null;
+            });
+          }
         }
       }
       // Other errors (500, network) → keep cached state to avoid mid-shift lockout.
@@ -706,7 +770,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       for (var i = 0; i < detail.lineItems.length; i++) {
         final item = detail.lineItems[i];
         final job = LabelPrintJob(
-          queueNumber: detail.queueNumber ?? receipt.id % 1000,
+          queueNumber: detail.queueNumber ?? '${receipt.id % 1000}',
           itemName: item.itemName,
           category: '',
           modifier: item.modifierNames.join('\n'),
@@ -1513,7 +1577,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
           child: TextField(
             controller: _receiptSearchController,
             decoration: InputDecoration(
-              hintText: 'Search receipt number',
+              hintText: 'Search collection number',
               prefixIcon: const Icon(Icons.search, size: 20),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
@@ -1639,12 +1703,22 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                                   crossAxisAlignment:
                                                       CrossAxisAlignment.start,
                                                   children: [
-                                                    Text(
-                                                      receipt.formattedTotal,
-                                                      style: const TextStyle(
-                                                        fontWeight:
-                                                            FontWeight.w600,
-                                                      ),
+                                                    Row(
+                                                      children: [
+                                                        Text(
+                                                          receipt.formattedTotal,
+                                                          style: const TextStyle(
+                                                            fontWeight:
+                                                                FontWeight.w600,
+                                                          ),
+                                                        ),
+                                                        if (receipt.sourceLabel.isNotEmpty &&
+                                                            receipt.source.toUpperCase() != 'POS') ...[
+                                                          const SizedBox(width: 8),
+                                                          _buildSourceBadge(
+                                                              receipt.sourceLabel),
+                                                        ],
+                                                      ],
                                                     ),
                                                     Text(
                                                       receipt.formattedTime,
@@ -1661,7 +1735,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                                     CrossAxisAlignment.end,
                                                 children: [
                                                   Text(
-                                                    rn,
+                                                    '#${receipt.queueNumber ?? ''}',
                                                     style: const TextStyle(
                                                       fontSize: 13,
                                                       color: Color(0xFF9E9E9E),
@@ -1731,6 +1805,31 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
   }
 
+  static const Map<String, Color> _sourceBadgeColors = {
+    'GrabFood': Color(0xFF00B14F),
+    'foodpanda': Color(0xFFD70F64),
+    'ShopeeFood': Color(0xFFEE4D2D),
+  };
+
+  Widget _buildSourceBadge(String sourceLabel) {
+    final color = _sourceBadgeColors[sourceLabel] ?? const Color(0xFF757575);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Text(
+        sourceLabel,
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          color: color,
+        ),
+      ),
+    );
+  }
+
   Widget _buildReceiptDetail() {
     final receipt = _selectedReceipt;
     if (receipt == null) {
@@ -1775,14 +1874,25 @@ class _RegisterScreenState extends State<RegisterScreen> {
               ),
               const SizedBox(width: 4),
               Expanded(
-                child: Text(
-                  rn,
-                  style: const TextStyle(
-                    color: Color(0xFF212121),
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  overflow: TextOverflow.ellipsis,
+                child: Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        '#${receipt.queueNumber ?? ''}',
+                        style: const TextStyle(
+                          color: Color(0xFF212121),
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (receipt.sourceLabel.isNotEmpty &&
+                        receipt.source.toUpperCase() != 'POS') ...[
+                      const SizedBox(width: 8),
+                      _buildSourceBadge(receipt.sourceLabel),
+                    ],
+                  ],
                 ),
               ),
               PopupMenuButton<String>(
@@ -1793,10 +1903,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     final payment = detail.payments.isNotEmpty
                         ? detail.payments.first
                         : null;
+                    final isFdOrder = receipt.source.isNotEmpty &&
+                        receipt.source.toUpperCase() != 'POS';
                     SunmiPrinterService().printReceipt(
                       PrintReceiptData(
                         receiptId: rn,
                         queueNumber: detail.queueNumber,
+                        collectionLabel: isFdOrder
+                            ? receipt.shortOrderNumber
+                            : null,
                         date: receipt.shortDatetime.split(' ').first,
                         time: receipt.formattedTime,
                         paymentMethod: receipt.paymentMethod,
@@ -1815,6 +1930,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                 ))
                             .toList(),
                         total: receipt.totalMoney,
+                        subtotal: detail.subtotal,
+                        discount: detail.totalDiscount,
+                        deliveryFee: detail.deliveryFee + detail.grabfoodDeliveryFee,
                         cashReceived: payment?.moneyAmount ?? receipt.totalMoney,
                         change: payment?.cashBack ?? 0.0,
                       ),
@@ -1928,6 +2046,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           'POS: ${_warehouseCode ?? ''}',
                           style: const TextStyle(fontSize: 14),
                         ),
+                        if (receipt.sourceLabel.isNotEmpty &&
+                            receipt.source.toUpperCase() != 'POS' &&
+                            receipt.queueNumber != null) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            'Queue: #${receipt.queueNumber}',
+                            style: const TextStyle(fontSize: 14),
+                          ),
+                        ],
                         const Divider(height: 40),
                         // Line items (or loading spinner)
                         if (_isLoadingDetail)
@@ -1976,6 +2103,44 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           ],
                         ],
                         const Divider(height: 24),
+                        // Subtotal / discount / delivery fee breakdown
+                        if (detail != null) ...[
+                          Row(
+                            children: [
+                              const Expanded(child: Text('Subtotal')),
+                              Text('RM${detail.subtotal.toStringAsFixed(2)}'),
+                            ],
+                          ),
+                          if (detail.totalDiscount > 0) ...[
+                            const SizedBox(height: 4),
+                            Row(
+                              children: [
+                                const Expanded(
+                                  child: Text('Discount',
+                                      style: TextStyle(color: Color(0xFF388E3C))),
+                                ),
+                                Text(
+                                  '-RM${detail.totalDiscount.toStringAsFixed(2)}',
+                                  style: const TextStyle(color: Color(0xFF388E3C)),
+                                ),
+                              ],
+                            ),
+                          ],
+                          if (detail.grabfoodDeliveryFee > 0) ...[
+                            const SizedBox(height: 4),
+                            Row(
+                              children: [
+                                const Expanded(child: Text('Delivery Fee')),
+                                Text('RM${detail.grabfoodDeliveryFee.toStringAsFixed(2)}'),
+                              ],
+                            ),
+                          ],
+                          if (receipt.sourceLabel.isNotEmpty &&
+                              receipt.source.toUpperCase() != 'POS')
+                            const Divider(height: 24)
+                          else
+                            const SizedBox(height: 8),
+                        ],
                         // Total row
                         Row(
                           children: [
@@ -2066,7 +2231,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               ],
                             ),
                           )
-                        else
+                        else if (receipt.sourceLabel.isEmpty ||
+                            receipt.source.toUpperCase() == 'POS')
                           Builder(builder: (context) {
                             final isSmall =
                                 MediaQuery.of(context).size.width < 700;
