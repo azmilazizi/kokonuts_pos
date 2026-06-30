@@ -43,12 +43,33 @@ class PrinterDiscoveryPlugin(private val context: Context) {
     // Devices captured via USB_DEVICE_ATTACHED broadcast while the app is running.
     private val usbEventCache = mutableMapOf<String, UsbDevice>()
 
+    // Tracks devices we've already called requestPermission() for this session so
+    // repeated scanUsb() calls don't show a second dialog while the first is pending.
+    private val requestedThisSession = mutableSetOf<String>()
+
+    // SharedPreferences key prefix for user-denied VID:PID pairs.
+    private val usbPrefs by lazy {
+        context.getSharedPreferences("usb_permissions", Context.MODE_PRIVATE)
+    }
+
     // Receives the result of UsbManager.requestPermission().
     private val usbPermissionReceiver = object : BroadcastReceiver() {
         override fun onReceive(ctx: Context, intent: Intent) {
             if (intent.action != ACTION_USB_PERMISSION) return
-            // Permission was either granted or denied — no further action needed
-            // here; the next scanUsb() call will reflect hasPermission() correctly.
+            val device: UsbDevice? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                intent.getParcelableExtra(UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
+            } else {
+                @Suppress("DEPRECATION")
+                intent.getParcelableExtra(UsbManager.EXTRA_DEVICE)
+            }
+            device ?: return
+            val granted = intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)
+            val denialKey = "denied_${device.vendorId}_${device.productId}"
+            if (!granted) {
+                usbPrefs.edit().putBoolean(denialKey, true).apply()
+            } else {
+                usbPrefs.edit().remove(denialKey).apply()
+            }
         }
     }
 
@@ -68,8 +89,10 @@ class PrinterDiscoveryPlugin(private val context: Context) {
                     usbEventCache[device.deviceName] = device
                     requestPermissionIfNeeded(device)
                 }
-                UsbManager.ACTION_USB_DEVICE_DETACHED ->
+                UsbManager.ACTION_USB_DEVICE_DETACHED -> {
                     usbEventCache.remove(device.deviceName)
+                    requestedThisSession.remove(device.deviceName)
+                }
             }
         }
     }
@@ -97,6 +120,7 @@ class PrinterDiscoveryPlugin(private val context: Context) {
             when (call.method) {
                 "scanBluetooth" -> result.success(scanBluetooth())
                 "scanUsb" -> result.success(scanUsb())
+                "resetUsbPermissions" -> { resetUsbPermissions(); result.success(null) }
                 else -> result.notImplemented()
             }
         }
@@ -187,6 +211,15 @@ class PrinterDiscoveryPlugin(private val context: Context) {
             ?: return
         if (usbManager.hasPermission(device)) return
 
+        // Already showed a dialog for this device this session — don't stack dialogs.
+        if (device.deviceName in requestedThisSession) return
+
+        // User previously denied this VID:PID — don't nag until they reset.
+        val denialKey = "denied_${device.vendorId}_${device.productId}"
+        if (usbPrefs.getBoolean(denialKey, false)) return
+
+        requestedThisSession.add(device.deviceName)
+
         val intent = Intent(ACTION_USB_PERMISSION).apply {
             setPackage(context.packageName) // required on Android 12+
         }
@@ -204,5 +237,10 @@ class PrinterDiscoveryPlugin(private val context: Context) {
         try {
             usbManager.requestPermission(device, pendingIntent)
         } catch (_: Exception) {}
+    }
+
+    private fun resetUsbPermissions() {
+        usbPrefs.edit().clear().apply()
+        requestedThisSession.clear()
     }
 }

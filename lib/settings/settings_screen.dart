@@ -88,6 +88,14 @@ class _Discovery {
       return [];
     }
   }
+
+  static Future<void> resetUsbPermissions() async {
+    try {
+      await _ch.invokeMethod('resetUsbPermissions');
+    } on PlatformException {
+      // ignore
+    }
+  }
 }
 
 // ─── Settings screen ──────────────────────────────────────────────────────────
@@ -315,6 +323,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
           .map((d) => {'name': d.name, 'detail': d.detail, 'key': d.key})
           .toList(),
     );
+  }
+
+  Future<void> _resetUsbPermissions() async {
+    await _Discovery.resetUsbPermissions();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('USB permissions reset. Replug devices and scan again.')),
+    );
+    setState(() {
+      _usbDevices = [];
+      _usbScanned = false;
+    });
   }
 
   void _openPrinterConfig(_DiscoveredDevice device) {
@@ -611,12 +631,38 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 28),
 
           // ── USB ──────────────────────────────────────────────────────────
-          _sectionHeaderRow(
-            label: 'USB Printers',
-            icon: Icons.usb,
-            buttonLabel: 'Scan',
-            loading: _isScanningUsb,
-            onTap: _scanUsb,
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'USB PRINTERS',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.8,
+                    color: Color(0xFF757575),
+                  ),
+                ),
+              ),
+              TextButton.icon(
+                style: TextButton.styleFrom(foregroundColor: const Color(0xFF757575)),
+                onPressed: _isScanningUsb ? null : _resetUsbPermissions,
+                icon: const Icon(Icons.lock_reset, size: 16),
+                label: const Text('Reset'),
+              ),
+              TextButton.icon(
+                style: TextButton.styleFrom(foregroundColor: _kBlue),
+                onPressed: _isScanningUsb ? null : _scanUsb,
+                icon: _isScanningUsb
+                    ? const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.usb, size: 16),
+                label: const Text('Scan'),
+              ),
+            ],
           ),
           const SizedBox(height: 8),
           if (_isScanningUsb)

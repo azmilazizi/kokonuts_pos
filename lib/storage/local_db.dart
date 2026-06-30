@@ -17,7 +17,7 @@ class LocalDb {
     final path = join(dir, 'kokonuts_pos.db');
     return openDatabase(
       path,
-      version: 2,
+      version: 3,
       onCreate: (db, _) async {
         await db.execute('''
           CREATE TABLE catalog_items (
@@ -26,6 +26,7 @@ class LocalDb {
             price REAL NOT NULL,
             group_id TEXT NOT NULL,
             modifier_group_ids TEXT NOT NULL DEFAULT '[]',
+            bundle_modifier_groups TEXT NOT NULL DEFAULT '[]',
             updated_ms INTEGER NOT NULL
           )
         ''');
@@ -96,6 +97,11 @@ class LocalDb {
               name TEXT NOT NULL
             )
           ''');
+        }
+        if (oldVersion < 3) {
+          await db.execute(
+            "ALTER TABLE catalog_items ADD COLUMN bundle_modifier_groups TEXT NOT NULL DEFAULT '[]'",
+          );
         }
       },
     );

@@ -1,3 +1,5 @@
+import 'pos_modifier_group.dart';
+
 class PosItem {
   const PosItem({
     required this.id,
@@ -7,6 +9,7 @@ class PosItem {
     required this.barcode,
     required this.skuCode,
     this.modifierGroupIds = const [],
+    this.bundleModifierGroups = const [],
   });
 
   final String id;
@@ -16,6 +19,7 @@ class PosItem {
   final String barcode;
   final String skuCode;
   final List<String> modifierGroupIds;
+  final List<BundleModifierGroup> bundleModifierGroups;
 
   static PosItem? fromJson(Map<String, dynamic> json) {
     if (json['can_be_sold'] != 'can_be_sold') return null;
@@ -33,6 +37,16 @@ class PosItem {
       }
     }
 
+    final rawBundleGroups = json['bundle_modifier_groups'];
+    final bundleModifierGroups = <BundleModifierGroup>[];
+    if (rawBundleGroups is List) {
+      for (final g in rawBundleGroups) {
+        if (g is Map<String, dynamic> && g['active'] == '1') {
+          bundleModifierGroups.add(BundleModifierGroup.fromJson(g));
+        }
+      }
+    }
+
     return PosItem(
       id: json['id']?.toString() ?? '',
       name: name,
@@ -43,6 +57,7 @@ class PosItem {
       barcode: json['commodity_barcode']?.toString() ?? '',
       skuCode: json['sku_code']?.toString() ?? '',
       modifierGroupIds: modifierGroupIds,
+      bundleModifierGroups: bundleModifierGroups,
     );
   }
 }

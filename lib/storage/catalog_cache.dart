@@ -85,6 +85,27 @@ class CatalogCache {
           'price': item.price,
           'group_id': item.groupId,
           'modifier_group_ids': jsonEncode(item.modifierGroupIds),
+          'bundle_modifier_groups': jsonEncode(item.bundleModifierGroups
+              .map((g) => {
+                    'id': g.id,
+                    'name': g.name,
+                    'selection_type': g.selectionType,
+                    'min_selections': g.minSelections.toString(),
+                    'max_selections': g.maxSelections.toString(),
+                    'active': '1',
+                    'modifiers': g.modifiers
+                        .map((m) => {
+                              'id': m.id,
+                              'name': m.name,
+                              'price_adjustment':
+                                  m.priceAdjustment.toStringAsFixed(2),
+                              'sort_order': m.sortOrder.toString(),
+                              'option_type': m.optionType,
+                              'source_id': m.sourceId,
+                            })
+                        .toList(),
+                  })
+              .toList()),
           'updated_ms': now,
         });
       }
@@ -134,6 +155,12 @@ class CatalogCache {
     final rows = await db.query('catalog_items');
     return rows.map((row) {
       final ids = jsonDecode(row['modifier_group_ids'] as String) as List;
+      final rawBundle =
+          jsonDecode(row['bundle_modifier_groups'] as String? ?? '[]') as List;
+      final bundleGroups = rawBundle
+          .whereType<Map<String, dynamic>>()
+          .map(BundleModifierGroup.fromJson)
+          .toList();
       return PosItem(
         id: row['id'] as String,
         name: row['name'] as String,
@@ -142,6 +169,7 @@ class CatalogCache {
         barcode: '',
         skuCode: '',
         modifierGroupIds: ids.map((e) => e.toString()).toList(),
+        bundleModifierGroups: bundleGroups,
       );
     }).toList();
   }

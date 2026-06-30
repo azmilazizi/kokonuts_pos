@@ -337,17 +337,25 @@ class _PosRegisterState extends State<PosRegister>
       if (seen.add(item.groupId)) cats.add(item.groupId);
     }
     final prods = items.map((item) {
-      final mGroups = item.modifierGroupIds
-          .map((id) => modifierGroupMap[id])
-          .whereType<PosModifierGroup>()
-          .map((g) => _ModifierGroup(
-                name: g.name,
-                multiSelect: !g.isSingleSelect,
-                modifiers: g.modifiers
-                    .map((m) => _Modifier(id: m.id, name: m.name, price: m.priceAdjustment))
-                    .toList(),
-              ))
-          .toList();
+      final mGroups = [
+        ...item.modifierGroupIds
+            .map((id) => modifierGroupMap[id])
+            .whereType<PosModifierGroup>()
+            .map((g) => _ModifierGroup(
+                  name: g.name,
+                  multiSelect: !g.isSingleSelect,
+                  modifiers: g.modifiers
+                      .map((m) => _Modifier(id: m.id, name: m.name, price: m.priceAdjustment))
+                      .toList(),
+                )),
+        ...item.bundleModifierGroups.map((g) => _ModifierGroup(
+              name: g.name,
+              multiSelect: !g.isSingleSelect,
+              modifiers: g.modifiers
+                  .map((m) => _Modifier(id: m.id, name: m.name, price: m.priceAdjustment))
+                  .toList(),
+            )),
+      ];
       return _Product(
         id: item.id,
         name: item.name,
@@ -575,7 +583,7 @@ class _PosRegisterState extends State<PosRegister>
 
   void _handleCharge() {
     if (_cart.isEmpty) return;
-    _cashController.text = '0.00';
+    _cashController.text = _total.toStringAsFixed(2);
     setState(() {
       _isPaymentMode = true;
       _showTicketPanel = false;
@@ -2485,6 +2493,7 @@ class _PosRegisterState extends State<PosRegister>
                           controller: _cashController,
                           keyboardType: TextInputType.number,
                           inputFormatters: [_CashInputFormatter()],
+                          onTap: () => _cashController.text = '0.00',
                           style: const TextStyle(fontSize: 16),
                           decoration: const InputDecoration(
                             prefixIcon: Icon(Icons.money_outlined),

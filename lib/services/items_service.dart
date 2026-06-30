@@ -42,6 +42,20 @@ class ItemsService {
     return groups;
   }
 
+  Future<List<BundleModifierGroup>> fetchBundleModifierGroups(
+      String token, String itemId) async {
+    final response = await _client.getJson(
+      '/pos/api/item/$itemId',
+      authToken: token,
+    );
+    final raw = response.data['bundle_modifier_groups'];
+    if (raw is! List) return [];
+    return raw
+        .whereType<Map<String, dynamic>>()
+        .map(BundleModifierGroup.fromJson)
+        .toList();
+  }
+
   Future<List<PosModifierGroup>> fetchModifierGroups(String token) async {
     final response = await _client.getJson(
       '/pos/api/v1/modifiers',
