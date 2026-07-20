@@ -21,6 +21,8 @@ import '../services/sunmi_display_service.dart';
 import '../services/sunmi_printer_service.dart';
 import '../services/sync_service.dart';
 import '../storage/catalog_cache.dart';
+import '../models/voucher.dart';
+import '../services/voucher_service.dart';
 import '../storage/order_queue.dart';
 import '../storage/secure_store.dart';
 import 'syncing_screen.dart';
@@ -184,6 +186,10 @@ class _PosRegisterState extends State<PosRegister>
 
   // Cashback
   bool _redeemCashback = false;
+
+  // Voucher
+  VoucherDetails? _appliedVoucher;
+  Key? _freeVoucherItemKey;
 
   // Offline order state
   bool _isOfflineOrder = false;
@@ -481,7 +487,28 @@ class _PosRegisterState extends State<PosRegister>
         : _billDiscountValue;
     return d.clamp(0.0, _subtotal);
   }
-  double get _totalDiscount => _itemsDiscount + _billDiscount;
+
+  double get _voucherDiscount {
+    final v = _appliedVoucher;
+    if (v == null) return 0.0;
+    double freeItemDiscount() {
+      try {
+        final item = _cart.firstWhere((i) => i.key == _freeVoucherItemKey);
+        return item.unitPrice.clamp(0.0, _subtotal);
+      } catch (_) {
+        return 0.0;
+      }
+    }
+    return switch (v.type) {
+      VoucherType.discountPercent =>
+        (_subtotal * v.value / 100).clamp(0.0, _subtotal),
+      VoucherType.fixedAmount => v.value.clamp(0.0, _subtotal),
+      VoucherType.bonusPoint => 0.0,
+      VoucherType.freeItem => freeItemDiscount(),
+    };
+  }
+
+  double get _totalDiscount => _itemsDiscount + _billDiscount + _voucherDiscount;
   double get _selectedCustomerPoints => _selectedCustomer?.cashbackBalance ?? 0.0;
   double get _cashbackAmount {
     if (!_redeemCashback) return 0.0;
@@ -728,6 +755,20 @@ class _PosRegisterState extends State<PosRegister>
         );
       }
 
+      if (!isOffline && _appliedVoucher != null) {
+        try {
+          await VoucherService().redeem(
+            token: token,
+            code: _appliedVoucher!.code,
+            receiptId: result.receiptId,
+            customerId: _selectedCustomer?.id,
+            customerPhone: _selectedCustomer?.phone,
+          );
+        } catch (e) {
+          debugPrint('Voucher redeem failed: $e');
+        }
+      }
+
       SunmiPrinterService().printReceipt(
         PrintReceiptData(
           receiptId: result.receiptNumber,
@@ -747,6 +788,8 @@ class _PosRegisterState extends State<PosRegister>
                     modifiers: _modifierList(item),
                   ))
               .toList(),
+          subtotal: _subtotal,
+          discount: _totalDiscount,
           total: _total,
           cashReceived: cashReceived > 0 ? cashReceived : _total,
           change: change,
@@ -791,7 +834,11 @@ class _PosRegisterState extends State<PosRegister>
   }
 
   void _clearCart() {
-    setState(() => _cart.clear());
+    setState(() {
+      _cart.clear();
+      _appliedVoucher = null;
+      _freeVoucherItemKey = null;
+    });
     SunmiDisplayService().showWelcome();
   }
 
@@ -1038,6 +1085,585 @@ class _PosRegisterState extends State<PosRegister>
       _syncCartToDisplay();
     });
   }
+
+  // ─── Voucher ──────────────────────────────────────────────────────────────
+
+  void _removeVoucher() {
+    setState(() {
+      _appliedVoucher = null;
+      _freeVoucherItemKey = null;
+    });
+    _syncCartToDisplay();
+  }
+
+  bool _cartItemMatchesFreeVoucher(_CartItem i, VoucherDetails voucher) {
+    if (voucher.freeItemId != null && voucher.freeItemId!.isNotEmpty) {
+      return i.product.id == voucher.freeItemId;
+    }
+    return voucher.freeItemName != null &&
+        i.product.name.toLowerCase() == voucher.freeItemName!.toLowerCase();
+  }
+
+  void _applyVoucher(VoucherDetails voucher) {
+    Key? freeItemKey;
+    if (voucher.type == VoucherType.freeItem) {
+      try {
+        freeItemKey = _cart
+            .firstWhere((i) => _cartItemMatchesFreeVoucher(i, voucher))
+            .key;
+      } catch (_) {}
+    }
+    setState(() {
+      _appliedVoucher = voucher;
+      _freeVoucherItemKey = freeItemKey;
+    });
+    _syncCartToDisplay();
+  }
+
+  void _showVoucherModal() {
+    final codeCtrl = TextEditingController();
+    var isLoading = false;
+    String? errorText;
+
+    showDialog<VoucherDetails?>(
+      context: context,
+      builder: (ctx) => MediaQuery(
+        data: MediaQuery.of(ctx).copyWith(viewInsets: EdgeInsets.zero),
+        child: StatefulBuilder(
+          builder: (ctx, setModal) {
+          Future<void> doValidate() async {
+            final code = codeCtrl.text.trim();
+            if (code.isEmpty) return;
+            setModal(() {
+              isLoading = true;
+              errorText = null;
+            });
+            try {
+              final token = await const SecureStore().readToken() ?? '';
+              final voucher = await VoucherService().validate(
+                token: token,
+                code: code,
+                customerId: _selectedCustomer?.id,
+                customerPhone: _selectedCustomer?.phone,
+                transactionAmount: _subtotal,
+              );
+              if (!ctx.mounted) return;
+              Navigator.pop(ctx, voucher);
+            } on VoucherValidationError catch (e) {
+              setModal(() {
+                isLoading = false;
+                errorText = e.message;
+              });
+            } catch (_) {
+              setModal(() {
+                isLoading = false;
+                errorText = 'Failed to validate voucher. Please try again.';
+              });
+            }
+          }
+
+          return Dialog(
+            backgroundColor: Colors.white,
+            insetPadding:
+                const EdgeInsets.symmetric(horizontal: 40, vertical: 100),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 400),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Expanded(
+                          child: Text(
+                            'Enter Voucher Code',
+                            style: TextStyle(
+                                fontSize: 17, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close),
+                          onPressed: () => Navigator.pop(ctx),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: codeCtrl,
+                      autofocus: true,
+                      textCapitalization: TextCapitalization.characters,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w500,
+                        letterSpacing: 1.5,
+                      ),
+                      decoration: InputDecoration(
+                        hintText: 'VOUCHER-CODE',
+                        prefixIcon: const Icon(Icons.local_offer_outlined),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        errorText: errorText,
+                      ),
+                      onSubmitted: (_) {
+                        if (!isLoading) doValidate();
+                      },
+                    ),
+                    const SizedBox(height: 20),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 48,
+                      child: ElevatedButton(
+                        onPressed: isLoading ? null : doValidate,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _kPrimary,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          disabledBackgroundColor: Colors.grey.shade300,
+                        ),
+                        child: isLoading
+                            ? const SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Text(
+                                'Validate',
+                                style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600),
+                              ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    ),
+    ).then((voucher) {
+      if (!mounted || voucher == null) return;
+
+      if (voucher.type == VoucherType.freeItem) {
+        _CartItem? matchingItem;
+        try {
+          matchingItem =
+              _cart.firstWhere((i) => _cartItemMatchesFreeVoucher(i, voucher));
+        } catch (_) {}
+        if (matchingItem == null) {
+          _Product? freeProduct;
+          try {
+            freeProduct = _products.firstWhere((p) {
+              if (voucher.freeItemId != null && voucher.freeItemId!.isNotEmpty) {
+                return p.id == voucher.freeItemId;
+              }
+              return voucher.freeItemName != null &&
+                  p.name.toLowerCase() == voucher.freeItemName!.toLowerCase();
+            });
+          } catch (_) {}
+          if (freeProduct != null) {
+            _promptAddFreeItem(voucher, freeProduct);
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  'Add "${voucher.freeItemName ?? 'the required item'}" to the order first.',
+                ),
+              ),
+            );
+          }
+          return;
+        }
+      }
+
+      _showVoucherPreview(voucher);
+    });
+  }
+
+  void _showVoucherPreview(VoucherDetails voucher) {
+    final isBonusWithoutMember =
+        voucher.type == VoucherType.bonusPoint && _selectedCustomer == null;
+
+    showDialog<bool>(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.white,
+        insetPadding:
+            const EdgeInsets.symmetric(horizontal: 40, vertical: 80),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.local_offer,
+                        color: _kPrimary, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        voucher.title.isNotEmpty ? voucher.title : 'Voucher',
+                        style: const TextStyle(
+                            fontSize: 17, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Code: ${voucher.code}',
+                  style: const TextStyle(
+                      fontSize: 12, color: Color(0xFF9E9E9E)),
+                ),
+                const SizedBox(height: 16),
+                const Divider(height: 1),
+                const SizedBox(height: 16),
+                _voucherDetailWidget(voucher),
+                if (isBonusWithoutMember) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFF3E0),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Row(
+                      children: [
+                        Icon(Icons.warning_amber_outlined,
+                            color: Color(0xFFE67E22), size: 18),
+                        SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Link a member to apply this voucher.',
+                            style: TextStyle(
+                                fontSize: 13, color: Color(0xFFBF360C)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+                if (voucher.expiresAt != null) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    'Expires: ${_fmtDate(voucher.expiresAt!)}',
+                    style: const TextStyle(
+                        fontSize: 12, color: Color(0xFF9E9E9E)),
+                  ),
+                ],
+                if (voucher.minSpend != null && voucher.minSpend! > 0) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    'Min. spend: RM ${voucher.minSpend!.toStringAsFixed(2)}',
+                    style: const TextStyle(
+                        fontSize: 12, color: Color(0xFF9E9E9E)),
+                  ),
+                ],
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.pop(ctx, false),
+                        style: OutlinedButton.styleFrom(
+                          padding:
+                              const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        child: const Text('Cancel'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: isBonusWithoutMember
+                            ? null
+                            : () => Navigator.pop(ctx, true),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _kPrimary,
+                          foregroundColor: Colors.white,
+                          padding:
+                              const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          disabledBackgroundColor: Colors.grey.shade300,
+                        ),
+                        child: const Text(
+                          'Apply Voucher',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    ).then((confirmed) {
+      if (confirmed == true) _applyVoucher(voucher);
+    });
+  }
+
+  void _promptAddFreeItem(VoucherDetails voucher, _Product freeProduct) {
+    final itemLabel =
+        '${voucher.freeItemMaxQty}× ${voucher.freeItemName ?? freeProduct.name}';
+
+    showDialog<bool>(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.white,
+        insetPadding:
+            const EdgeInsets.symmetric(horizontal: 40, vertical: 100),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 400),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Row(
+                  children: [
+                    Icon(Icons.redeem_outlined, color: _kPrimary, size: 22),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Free Item Voucher',
+                        style: TextStyle(
+                            fontSize: 17, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                RichText(
+                  text: TextSpan(
+                    style: const TextStyle(
+                        fontSize: 14, color: Color(0xFF424242)),
+                    children: [
+                      const TextSpan(text: 'This voucher includes '),
+                      TextSpan(
+                        text: itemLabel,
+                        style:
+                            const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      const TextSpan(text: ' for free. Add it to the order?'),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.pop(ctx, false),
+                        style: OutlinedButton.styleFrom(
+                          padding:
+                              const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        child: const Text('Cancel'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.pop(ctx, true),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _kPrimary,
+                          foregroundColor: Colors.white,
+                          padding:
+                              const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        child: const Text(
+                          'Add to Order',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    ).then((confirmed) {
+      if (confirmed != true || !mounted) return;
+      if (!freeProduct.hasModifiers) {
+        final newItem = _CartItem(product: freeProduct, quantity: 1);
+        setState(() {
+          _cart.add(newItem);
+          _appliedVoucher = voucher;
+          _freeVoucherItemKey = newItem.key;
+        });
+        _syncCartToDisplay();
+      } else {
+        showDialog<void>(
+          context: context,
+          builder: (ctx) => MediaQuery(
+            data: MediaQuery.of(ctx).copyWith(viewInsets: EdgeInsets.zero),
+            child: _ModifierModal(
+              product: freeProduct,
+              initialSelected: {},
+              initialQuantity: 1,
+              initialDiscountValue: 0.0,
+              initialDiscountIsPercent: false,
+              onSave: (selected, qty, discountValue, discountIsPercent) {
+                final newItem = _CartItem(
+                  product: freeProduct,
+                  quantity: qty,
+                  selectedModifiers: selected,
+                  itemDiscountValue: discountValue,
+                  itemDiscountIsPercent: discountIsPercent,
+                );
+                setState(() {
+                  _cart.add(newItem);
+                  _appliedVoucher = voucher;
+                  _freeVoucherItemKey = newItem.key;
+                });
+                _syncCartToDisplay();
+              },
+            ),
+          ),
+        );
+      }
+    });
+  }
+
+  Widget _voucherDetailWidget(VoucherDetails voucher) {
+    _CartItem? freeItem;
+    if (voucher.type == VoucherType.freeItem) {
+      try {
+        freeItem = _cart
+            .firstWhere((i) => _cartItemMatchesFreeVoucher(i, voucher));
+      } catch (_) {}
+    }
+
+    late final IconData icon;
+    late final String label;
+    late final String sub;
+    switch (voucher.type) {
+      case VoucherType.discountPercent:
+        final saving =
+            (_subtotal * voucher.value / 100).clamp(0.0, _subtotal);
+        icon = Icons.percent_outlined;
+        label = '${voucher.value.toStringAsFixed(0)}% off';
+        sub = 'Saves you RM ${saving.toStringAsFixed(2)}';
+      case VoucherType.fixedAmount:
+        icon = Icons.money_off_outlined;
+        label = 'RM ${voucher.value.toStringAsFixed(2)} off';
+        sub = 'Fixed amount discount';
+      case VoucherType.bonusPoint:
+        icon = Icons.star_outline;
+        label = '+${voucher.value.toStringAsFixed(0)} bonus points';
+        sub = 'Awarded on transaction completion';
+      case VoucherType.freeItem:
+        icon = Icons.redeem_outlined;
+        label =
+            '${voucher.freeItemMaxQty}× ${voucher.freeItemName ?? 'Item'} — FREE';
+        sub = freeItem != null
+            ? 'RM ${(freeItem.unitPrice * voucher.freeItemMaxQty).toStringAsFixed(2)} off'
+            : 'Free item voucher';
+    }
+
+    return Row(
+      children: [
+        Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            color: const Color(0xFFFFF3E0),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(icon, color: _kPrimary, size: 22),
+        ),
+        const SizedBox(width: 12),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label,
+                style: const TextStyle(
+                    fontWeight: FontWeight.w600, fontSize: 15)),
+            Text(sub,
+                style: const TextStyle(
+                    fontSize: 12, color: Color(0xFF9E9E9E))),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _voucherSummaryRow(VoucherDetails voucher) {
+    late final String valueText;
+    switch (voucher.type) {
+      case VoucherType.bonusPoint:
+        valueText = '+${voucher.value.toStringAsFixed(0)} pts';
+      case VoucherType.freeItem:
+        valueText = 'FREE item';
+      case VoucherType.discountPercent:
+      case VoucherType.fixedAmount:
+        valueText = '- RM ${_voucherDiscount.toStringAsFixed(2)}';
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          const Icon(Icons.local_offer_outlined,
+              size: 12, color: Color(0xFFE67E22)),
+          const SizedBox(width: 4),
+          Expanded(
+            child: Text(
+              voucher.code,
+              style: const TextStyle(
+                fontSize: 13,
+                color: Color(0xFF757575),
+                fontStyle: FontStyle.italic,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          Text(valueText,
+              style:
+                  const TextStyle(fontSize: 13, color: Color(0xFFE67E22))),
+          const SizedBox(width: 4),
+          GestureDetector(
+            onTap: _removeVoucher,
+            child: const Icon(Icons.close,
+                size: 14, color: Color(0xFF9E9E9E)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static String _fmtDate(DateTime dt) =>
+      '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+
+  // ──────────────────────────────────────────────────────────────────────────
 
   Widget _billDiscountTypeBtn(String label, bool active,
       {required VoidCallback onTap}) {
@@ -1975,16 +2601,35 @@ class _PosRegisterState extends State<PosRegister>
                     ),
                     itemBuilder: (_, i) {
                       final item = _cart[i];
+                      final isFreeItem =
+                          _appliedVoucher?.type == VoucherType.freeItem &&
+                              item.key == _freeVoucherItemKey;
                       return _SlidableCartRow(
                         key: item.key,
                         item: item,
                         summary: _modifierSummary(item),
+                        isFreeItem: isFreeItem,
                         onTap: () => _showModifierModal(
                             item.product,
                             editItem: item),
                         onDelete: () {
-                          setState(() => _cart.remove(item));
+                          setState(() {
+                            if (isFreeItem) {
+                              _appliedVoucher = null;
+                              _freeVoucherItemKey = null;
+                            }
+                            _cart.remove(item);
+                          });
                           _syncCartToDisplay();
+                          if (isFreeItem) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Voucher removed — free item was removed from order',
+                                ),
+                              ),
+                            );
+                          }
                         },
                       );
                     },
@@ -2004,17 +2649,45 @@ class _PosRegisterState extends State<PosRegister>
                     children: [
                       _summaryRow('Subtotal',
                           'RM ${_subtotal.toStringAsFixed(2)}'),
-                      if (_totalDiscount > 0)
+                      if (_itemsDiscount + _billDiscount > 0)
                         _summaryRow(
                           'Discount',
-                          '- RM ${_totalDiscount.toStringAsFixed(2)}',
+                          '- RM ${(_itemsDiscount + _billDiscount).toStringAsFixed(2)}',
                           valueColor: const Color(0xFFE67E22),
                         ),
+                      if (_appliedVoucher != null)
+                        _voucherSummaryRow(_appliedVoucher!),
                       if (_cashbackAmount > 0)
                         _summaryRow(
                           'Cashback Redeem',
                           '- RM ${_cashbackAmount.toStringAsFixed(2)}',
                           valueColor: const Color(0xFFE67E22),
+                        ),
+                      if (!paymentMode && _appliedVoucher == null)
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: InkWell(
+                            onTap: _showVoucherModal,
+                            borderRadius: BorderRadius.circular(4),
+                            child: const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 4),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.local_offer_outlined,
+                                      size: 13,
+                                      color: Color(0xFF9E9E9E)),
+                                  SizedBox(width: 4),
+                                  Text(
+                                    'Add voucher code',
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        color: Color(0xFF9E9E9E)),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
                         ),
                     ],
                   ),
@@ -2382,6 +3055,8 @@ class _PosRegisterState extends State<PosRegister>
                   _billDiscountValue = 0.0;
                   _billDiscountIsPercent = false;
                   _redeemCashback = false;
+                  _appliedVoucher = null;
+                  _freeVoucherItemKey = null;
                   _selectedCustomer = null;
                   _cashController.text = '0.00';
                 });
@@ -2639,12 +3314,14 @@ class _SlidableCartRow extends StatefulWidget {
     required this.summary,
     required this.onTap,
     required this.onDelete,
+    this.isFreeItem = false,
   });
 
   final _CartItem item;
   final String summary;
   final VoidCallback onTap;
   final VoidCallback onDelete;
+  final bool isFreeItem;
 
   @override
   State<_SlidableCartRow> createState() => _SlidableCartRowState();
@@ -2723,7 +3400,30 @@ class _SlidableCartRowState extends State<_SlidableCartRow> {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    if (widget.item.itemDiscount > 0)
+                    if (widget.isFreeItem)
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            'RM ${widget.item.lineTotal.toStringAsFixed(2)}',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFF9E9E9E),
+                              decoration: TextDecoration.lineThrough,
+                              decorationColor: Color(0xFF9E9E9E),
+                            ),
+                          ),
+                          const Text(
+                            'FREE',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14,
+                              color: Color(0xFF4CAF50),
+                            ),
+                          ),
+                        ],
+                      )
+                    else if (widget.item.itemDiscount > 0)
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [

@@ -13,7 +13,6 @@ import 'store_config_service.dart';
 
 export 'print_models.dart';
 
-
 class SunmiPrinterService {
   static final SunmiPrinterService _instance = SunmiPrinterService._();
   factory SunmiPrinterService() => _instance;
@@ -69,8 +68,12 @@ class SunmiPrinterService {
   Future<void> openCashDrawer() async {
     try {
       final mac = await PrinterConfigService().getReceiptPrinterMac();
-      if (_isBtMac(mac ?? '')) {
-        await BtPrinterService().openDrawer(mac!);
+      if (mac == null || mac == PrinterConfigService.kSunmiKey) {
+        // For Sunmi built-in printer, send ESC/POS cash drawer kick command
+        const drawerKick = [0x1B, 0x70, 0x00, 0x19, 0xFA];
+        await SunmiPrinter.printEscPos(drawerKick);
+      } else if (_isBtMac(mac)) {
+        await BtPrinterService().openDrawer(mac);
       }
     } on PlatformException {
       // No-op on non-Sunmi hardware.
