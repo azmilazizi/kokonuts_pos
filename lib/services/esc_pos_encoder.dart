@@ -70,8 +70,13 @@ class EscPosEncoder {
     if (cmd.bold) buf.addAll(_boldOn);
     if (cmd.small) buf.addAll(_fontBOn);
 
-    buf.addAll(_encode(cmd.text));
-    buf.addAll(_lf);
+    final maxWidth = cmd.large
+        ? (lineWidth ~/ 2).clamp(1, lineWidth)
+        : lineWidth;
+    for (final line in _wordWrap(cmd.text, maxWidth)) {
+      buf.addAll(_encode(line));
+      buf.addAll(_lf);
+    }
 
     if (cmd.small) buf.addAll(_fontBOff);
     if (cmd.bold) buf.addAll(_boldOff);
@@ -82,7 +87,7 @@ class EscPosEncoder {
   // ── Row ───────────────────────────────────────────────────────────────────
 
   void _writeRow(List<int> buf, RcRow cmd) {
-    buf.addAll(_alignLeft);
+    buf.addAll(_alignCenter);
     if (cmd.bold) buf.addAll(_boldOn);
 
     final rightWidth = (lineWidth * 0.35).round();
@@ -108,19 +113,20 @@ class EscPosEncoder {
       } else {
         final chunk = cmd.rightAlignLabel
             ? chunks[i].padLeft(leftWidth)
-            : chunks[i];
-        buf.addAll(_encode(chunk));
+            : chunks[i].padRight(leftWidth);
+        buf.addAll(_encode(chunk.padRight(lineWidth)));
       }
       buf.addAll(_lf);
     }
 
     if (cmd.bold) buf.addAll(_boldOff);
+    buf.addAll(_alignLeft);
   }
 
   // ── 3-column row (name | qty | price) ────────────────────────────────────
 
   void _writeRow3(List<int> buf, RcRow3 cmd) {
-    buf.addAll(_alignLeft);
+    buf.addAll(_alignCenter);
     if (cmd.bold) buf.addAll(_boldOn);
 
     final priceWidth = (lineWidth * 0.32).round();
@@ -140,21 +146,24 @@ class EscPosEncoder {
       final isLast = i == chunks.length - 1;
       if (isLast) {
         final line =
-            chunks[i].padRight(nameWidth) + qty.padLeft(qtyWidth) + price.padLeft(priceWidth);
+            chunks[i].padRight(nameWidth) +
+            qty.padLeft(qtyWidth) +
+            price.padLeft(priceWidth);
         buf.addAll(_encode(line));
       } else {
-        buf.addAll(_encode(chunks[i]));
+        buf.addAll(_encode(chunks[i].padRight(lineWidth)));
       }
       buf.addAll(_lf);
     }
 
     if (cmd.bold) buf.addAll(_boldOff);
+    buf.addAll(_alignLeft);
   }
 
   // ── 5-column item row (name | price | qty | discount | amount) ───────────
 
   void _writeItemRow(List<int> buf, RcItemRow cmd) {
-    buf.addAll(_alignLeft);
+    buf.addAll(_alignCenter);
     if (cmd.isHeader) buf.addAll(_boldOn);
 
     final amtWidth = (lineWidth * 0.25).round();
@@ -162,7 +171,13 @@ class EscPosEncoder {
     const qtyWidth = 3;
     final priceWidth = (lineWidth * 0.19).round();
     const priceQtySpacer = 1;
-    final nameWidth = lineWidth - amtWidth - discWidth - qtyWidth - priceWidth - priceQtySpacer;
+    final nameWidth =
+        lineWidth -
+        amtWidth -
+        discWidth -
+        qtyWidth -
+        priceWidth -
+        priceQtySpacer;
 
     final amount = cmd.amount.length <= amtWidth
         ? cmd.amount
@@ -181,21 +196,24 @@ class EscPosEncoder {
     for (int i = 0; i < chunks.length; i++) {
       final isLast = i == chunks.length - 1;
       if (isLast) {
-        final line = '${chunks[i].padRight(nameWidth)}${price.padLeft(priceWidth)} ${qty.padLeft(qtyWidth)}${disc.padLeft(discWidth)}${amount.padLeft(amtWidth)}';
+        final line =
+            '${chunks[i].padRight(nameWidth)}${price.padLeft(priceWidth)} ${qty.padLeft(qtyWidth)}${disc.padLeft(discWidth)}${amount.padLeft(amtWidth)}';
         buf.addAll(_encode(line));
       } else {
-        buf.addAll(_encode(chunks[i]));
+        buf.addAll(_encode(chunks[i].padRight(lineWidth)));
       }
       buf.addAll(_lf);
     }
 
     if (cmd.isHeader) buf.addAll(_boldOff);
+    buf.addAll(_alignLeft);
   }
 
   // Word-wrap [text] so every chunk fits within [maxWidth] characters.
   // Breaks at the last space within the width; hard-breaks if no space exists.
   List<String> _wordWrap(String text, int maxWidth) {
     final input = text.trim();
+    if (input.isEmpty) return [''];
     if (input.length <= maxWidth) return [input];
 
     final chunks = <String>[];
@@ -244,9 +262,14 @@ class EscPosEncoder {
 
     // GS v 0 m xL xH yL yH  (m=0: normal scale)
     buf.addAll([
-      0x1D, 0x76, 0x30, 0x00,
-      bytesPerRow & 0xFF, (bytesPerRow >> 8) & 0xFF,
-      targetH & 0xFF, (targetH >> 8) & 0xFF,
+      0x1D,
+      0x76,
+      0x30,
+      0x00,
+      bytesPerRow & 0xFF,
+      (bytesPerRow >> 8) & 0xFF,
+      targetH & 0xFF,
+      (targetH >> 8) & 0xFF,
     ]);
 
     for (int y = 0; y < targetH; y++) {
@@ -311,8 +334,10 @@ class EscPosEncoder {
     final line = dashed
         ? ('- ' * (lineWidth ~/ 2)).substring(0, lineWidth)
         : '-' * lineWidth;
+    buf.addAll(_alignCenter);
     buf.addAll(_encode(line));
     buf.addAll(_lf);
+    buf.addAll(_alignLeft);
   }
 
   void _writeFeed(List<int> buf, int lines) {
@@ -320,10 +345,10 @@ class EscPosEncoder {
   }
 
   List<int> _alignBytes(ReceiptAlign align) => switch (align) {
-        ReceiptAlign.left => _alignLeft,
-        ReceiptAlign.center => _alignCenter,
-        ReceiptAlign.right => _alignRight,
-      };
+    ReceiptAlign.left => _alignLeft,
+    ReceiptAlign.center => _alignCenter,
+    ReceiptAlign.right => _alignRight,
+  };
 
   // Encode text to Latin-1 bytes for ESC/POS output.
   // Common Unicode punctuation is mapped to ASCII equivalents first so that
@@ -332,13 +357,13 @@ class EscPosEncoder {
   List<int> _encode(String text) {
     final normalized = text
         .replaceAll('…', '...') // … ellipsis
-        .replaceAll('’', "'")   // ' right single quote
-        .replaceAll('‘', "'")   // ' left single quote
-        .replaceAll('“', '"')   // " left double quote
-        .replaceAll('”', '"')   // " right double quote
-        .replaceAll('–', '-')   // – en-dash
-        .replaceAll('—', '-')   // — em-dash
-        .replaceAll(' ', ' ')   // non-breaking space
+        .replaceAll('’', "'") // ' right single quote
+        .replaceAll('‘', "'") // ' left single quote
+        .replaceAll('“', '"') // " left double quote
+        .replaceAll('”', '"') // " right double quote
+        .replaceAll('–', '-') // – en-dash
+        .replaceAll('—', '-') // — em-dash
+        .replaceAll(' ', ' ') // non-breaking space
         .replaceAll('™', '(TM)') // ™
         .replaceAll('®', '(R)'); // ®
     try {

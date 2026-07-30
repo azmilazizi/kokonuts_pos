@@ -769,7 +769,10 @@ class _PosRegisterState extends State<PosRegister>
         }
       }
 
-      SunmiPrinterService().printReceipt(
+      debugPrint(
+        'POS: starting receipt print for ${result.receiptNumber} via $method',
+      );
+      await SunmiPrinterService().printReceipt(
         PrintReceiptData(
           receiptId: result.receiptNumber,
           queueNumber: result.queueNumber,
@@ -795,8 +798,13 @@ class _PosRegisterState extends State<PosRegister>
           change: change,
         ),
       );
+      debugPrint('POS: receipt print finished for ${result.receiptNumber}');
 
-      if (method == 'Cash') SunmiPrinterService().openCashDrawer();
+      if (method == 'Cash') {
+        debugPrint('POS: opening cash drawer for ${result.receiptNumber}');
+        await SunmiPrinterService().openCashDrawer();
+        debugPrint('POS: cash drawer command sent for ${result.receiptNumber}');
+      }
       SunmiDisplayService().showComplete(totalPaid: _total, queueNumber: result.queueNumber);
       Future.delayed(const Duration(seconds: 10), () {
         if (mounted) SunmiDisplayService().showWelcome();
