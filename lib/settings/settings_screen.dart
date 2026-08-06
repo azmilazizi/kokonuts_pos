@@ -1,12 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../api/api_client.dart';
-import '../api/app_config.dart';
 import '../services/bt_printer_service.dart';
-import '../services/http_proxy_overrides.dart';
 import '../services/printer_config_service.dart';
 import '../services/sunmi_display_service.dart';
 
@@ -152,41 +148,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // ── General ───────────────────────────────────────────────────────────────
   bool _darkModeEnabled = false;
 
-  final TextEditingController _proxyHttpCtrl = TextEditingController();
-  final TextEditingController _proxyHttpsCtrl = TextEditingController();
-  final TextEditingController _proxyNoProxyCtrl = TextEditingController();
-  bool _proxySaving = false;
-  bool _trustBadCerts = false;
-  bool _verboseProxyLog = false;
-  bool _testingConn = false;
-  String? _lastConnResult;
-
-  @override
-  void dispose() {
-    _proxyHttpCtrl.dispose();
-    _proxyHttpsCtrl.dispose();
-    _proxyNoProxyCtrl.dispose();
-    super.dispose();
-  }
-
   @override
   void initState() {
     super.initState();
     _loadSavedConfigs();
     _initDisplayState();
-    _loadProxyConfig();
-  }
-
-  Future<void> _loadProxyConfig() async {
-    final cfg = await ProxyAwareHttpOverrides.readSavedConfig();
-    if (!mounted) return;
-    setState(() {
-      _proxyHttpCtrl.text = cfg.http ?? '';
-      _proxyHttpsCtrl.text = cfg.https ?? '';
-      _proxyNoProxyCtrl.text = cfg.noProxy.join(',');
-      _trustBadCerts = cfg.trustBadCerts;
-      _verboseProxyLog = cfg.verboseLog;
-    });
   }
 
   Future<void> _initDisplayState() async {
@@ -1096,230 +1062,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
               activeTrackColor: const Color(0xFFFFCC80),
             ),
           ),
-          const SizedBox(height: 24),
-          const Text(
-            'HTTP PROXY (HOTSPOT / CORPORATE NETWORK)',
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.8,
-              color: Color(0xFF757575),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: const Color(0xFFE0E0E0)),
-            ),
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Set proxy only if your Wi-Fi / hotspot requires it. '
-                  'Values are applied globally to every API call immediately after saving.',
-                  style: TextStyle(color: Color(0xFF757575), fontSize: 13),
-                ),
-                const SizedBox(height: 16),
-                _ProxyField(
-                  label: 'HTTP Proxy URL',
-                  controller: _proxyHttpCtrl,
-                  hint: 'http://proxy.example.com:8080',
-                ),
-                const SizedBox(height: 12),
-                _ProxyField(
-                  label: 'HTTPS Proxy URL',
-                  controller: _proxyHttpsCtrl,
-                  hint: 'http://proxy.example.com:8080 (usually same as HTTP)',
-                ),
-                const SizedBox(height: 12),
-                _ProxyField(
-                  label: 'Bypass hosts',
-                  controller: _proxyNoProxyCtrl,
-                  hint: 'localhost,127.0.0.1,.mycompany.lan',
-                ),
-                const SizedBox(height: 10),
-                SwitchListTile(
-                  dense: true,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 0),
-                  value: _trustBadCerts,
-                  onChanged: (v) => setState(() => _trustBadCerts = v),
-                  title: const Text('Trust bad certificates'),
-                  subtitle: const Text(
-                    'Use for hotspot / captive portals that intercept HTTPS with a '
-                    'self-signed cert when hotspot quota is exhausted.',
-                    style: TextStyle(fontSize: 12, color: Color(0xFF757575)),
-                  ),
-                ),
-                SwitchListTile(
-                  dense: true,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 0),
-                  value: _verboseProxyLog,
-                  onChanged: (v) => setState(() => _verboseProxyLog = v),
-                  title: const Text('Verbose proxy log'),
-                  subtitle: const Text(
-                    'Prints PROXY / DIRECT decision per request to the debug console.',
-                    style: TextStyle(fontSize: 12, color: Color(0xFF757575)),
-                  ),
-                ),
-                const SizedBox(height: 6),
-                if (_lastConnResult != null)
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF3F4F8),
-                      border: Border.all(color: const Color(0xFFE0E0E0)),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      _lastConnResult!,
-                      style: const TextStyle(
-                        fontFamily: 'monospace',
-                        fontSize: 12,
-                        color: Color(0xFF424242),
-                        height: 1.35,
-                      ),
-                    ),
-                  ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    OutlinedButton(
-                      onPressed: _testingConn ? null : _testConnection,
-                      child: _testingConn
-                          ? const Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                SizedBox(
-                                  width: 12,
-                                  height: 12,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                ),
-                                SizedBox(width: 8),
-                                Text('Testing…'),
-                              ],
-                            )
-                          : const Text('Test Connection'),
-                    ),
-                    const Spacer(),
-                    TextButton(
-                      onPressed: _proxySaving
-                          ? null
-                          : () {
-                              _proxyHttpCtrl.clear();
-                              _proxyHttpsCtrl.clear();
-                              _proxyNoProxyCtrl.clear();
-                              setState(() {
-                                _trustBadCerts = false;
-                                _verboseProxyLog = false;
-                              });
-                              _saveProxyConfig(clearAll: true);
-                            },
-                      child: const Text('Clear'),
-                    ),
-                    const SizedBox(width: 8),
-                    FilledButton(
-                      onPressed: _proxySaving ? null : () => _saveProxyConfig(),
-                      style: FilledButton.styleFrom(backgroundColor: _kGreen),
-                      child: _proxySaving
-                          ? const SizedBox(
-                              width: 14,
-                              height: 14,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : const Text('Save Proxy'),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
         ],
       ),
     );
-  }
-
-  Future<void> _testConnection() async {
-    setState(() {
-      _testingConn = true;
-      _lastConnResult = null;
-    });
-    final stopwatch = Stopwatch()..start();
-    final summary = await ProxyAwareHttpOverrides.summary();
-    final client = ApiClient();
-    try {
-      final status = await client.ping();
-      stopwatch.stop();
-      if (!mounted) return;
-      final codeLabel = status.statusCode != null
-          ? 'HTTP ${status.statusCode}'
-          : (status.isReachable ? 'OK' : 'unreachable');
-      final msg = StringBuffer(
-        'Target: ${AppConfig.baseUrl}\n'
-        'Result: ${status.isReachable ? '✅ Reachable' : '❌ Failed'} ($codeLabel) in ${stopwatch.elapsedMilliseconds} ms\n'
-        '\n── Active proxy config ──\n$summary\n'
-        '${status.errorMessage != null && !status.isReachable ? '\n── Error ──\n${status.errorMessage}' : ''}',
-      );
-      setState(() {
-        _lastConnResult = msg.toString();
-      });
-    } on http.ClientException catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _lastConnResult =
-            'Target: ${AppConfig.baseUrl}\n'
-            'Result: ❌ ClientException in ${stopwatch.elapsedMilliseconds} ms\n\n'
-            '── Active proxy config ──\n$summary\n\n── Error ──\n$e';
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _lastConnResult =
-            'Target: ${AppConfig.baseUrl}\n'
-            'Result: ❌ Exception in ${stopwatch.elapsedMilliseconds} ms\n\n'
-            '── Active proxy config ──\n$summary\n\n── Error ──\n$e';
-      });
-    } finally {
-      if (mounted) setState(() => _testingConn = false);
-    }
-  }
-
-  Future<void> _saveProxyConfig({bool clearAll = false}) async {
-    setState(() => _proxySaving = true);
-    try {
-      await ProxyAwareHttpOverrides.saveConfig(
-        httpProxy: clearAll ? null : _proxyHttpCtrl.text,
-        httpsProxy: clearAll ? null : _proxyHttpsCtrl.text,
-        noProxyCsv: clearAll ? null : _proxyNoProxyCtrl.text,
-        trustBadCerts: clearAll ? false : _trustBadCerts,
-        verboseLog: clearAll ? false : _verboseProxyLog,
-      );
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            clearAll ? 'Proxy settings cleared.' : 'Proxy settings applied.',
-          ),
-        ),
-      );
-      if (clearAll) {
-        setState(() {
-          _proxyHttpCtrl.clear();
-          _proxyHttpsCtrl.clear();
-          _proxyNoProxyCtrl.clear();
-        });
-      }
-    } finally {
-      if (mounted) setState(() => _proxySaving = false);
-    }
   }
 }
 
@@ -1573,61 +1318,6 @@ class _SettingsNavItem extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-class _ProxyField extends StatelessWidget {
-  const _ProxyField({required this.label, required this.controller, this.hint});
-
-  final String label;
-  final TextEditingController controller;
-  final String? hint;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: Color(0xFF616161),
-          ),
-        ),
-        const SizedBox(height: 6),
-        TextField(
-          controller: controller,
-          style: const TextStyle(fontSize: 14),
-          decoration: InputDecoration(
-            isDense: true,
-            hintText: hint,
-            hintStyle: const TextStyle(
-              fontSize: 13,
-              color: Color(0xFFBDBDBD),
-              fontStyle: FontStyle.italic,
-            ),
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 12,
-              vertical: 12,
-            ),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(color: Color(0xFFE0E0E0)),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(color: Color(0xFFE0E0E0)),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(color: Color(0xFFE67E22)),
-            ),
-          ),
-        ),
-      ],
     );
   }
 }

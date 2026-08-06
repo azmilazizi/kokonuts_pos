@@ -305,7 +305,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final SecureStore _secureStore = const SecureStore();
   final TextInputFormatter _currencyFormatter = _CurrencyTextInputFormatter();
   ApiStatus? _syncStatus;
-  String? _lastProxySummary;
   bool _isSyncLoading = false;
   bool _isSigningOut = false;
   String? _warehouseCode;
@@ -1485,18 +1484,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
       _isSyncLoading = true;
     });
 
-    final pingFuture = _apiClient.ping();
-    final summaryFuture = ProxyAwareHttpOverrides.summary();
-    final results = await Future.wait([pingFuture, summaryFuture]);
-    final status = results[0] as ApiStatus;
-    final summary = results[1] as String;
+    final status = await _apiClient.ping();
     if (!mounted) {
       return;
     }
 
     setState(() {
       _syncStatus = status;
-      _lastProxySummary = summary;
       _isSyncLoading = false;
     });
   }
@@ -3060,8 +3054,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
         : 'Unable to reach CRM API'
               '${status.errorMessage == null ? '.' : ': ${status.errorMessage}'}';
 
-    final proxySummary = _lastProxySummary;
-
     return Container(
       width: 560,
       padding: const EdgeInsets.all(32),
@@ -3106,57 +3098,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
               ),
             ],
           ),
-          if (!_isSyncLoading && !isReachable && proxySummary != null) ...[
-            const SizedBox(height: 18),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: const Color(0xFFFFF8E1),
-                border: Border.all(color: const Color(0xFFFFE082)),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(
-                        Icons.wifi_tethering_error_outlined,
-                        size: 16,
-                        color: Color(0xFFE65100),
-                      ),
-                      SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'If your Wi-Fi / hotspot forces a transparent proxy '
-                          '(typical when hotspot quota is exhausted but carrier '
-                          'data is still unlimited), set the HTTP proxy in '
-                          'Settings → General → HTTP Proxy.',
-                          style: TextStyle(
-                            fontSize: 12.5,
-                            color: Color(0xFF4E342E),
-                            height: 1.35,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    proxySummary,
-                    style: const TextStyle(
-                      fontFamily: 'monospace',
-                      fontSize: 11.5,
-                      color: Color(0xFF4E342E),
-                      height: 1.45,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
           const SizedBox(height: 24),
           Wrap(
             spacing: 12,

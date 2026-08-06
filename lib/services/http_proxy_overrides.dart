@@ -1,192 +1,74 @@
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/services.dart';
 
-/// Global HTTP proxy override that forces the Dart `HttpClient` (used by the
-/// `http` package, Dio, and every other `dart:io`-based client) to honor the
-/// hotspot / carrier's HTTP proxy.
+/// Global [HttpOverrides] that forces every [HttpClient] to honor the
+/// **Android system Wi-Fi proxy** set via:
+///   Settings → Wi-Fi → (network) → Advanced → Proxy → Manual
 ///
-/// # Why this works
+/// Why this is needed:
+/// - Dart's `Platform.environment` does NOT see Android Wi-Fi proxy vars.
+/// - Default `HttpClient` has `findProxy == null` (always DIRECT).
 ///
-/// Simply overriding [findProxyFromEnvironment] is **not** enough.
-/// The default `HttpClient` has `findProxy == null` (i.e. always DIRECT)
-/// unless you explicitly assign it to `HttpClient.findProxyFromEnvironment`.
-/// This class does that for **every** client returned by [createHttpClient] —
-/// so every `new HttpClient()` (including the one wrapped by `package:http`'s
-/// default `IOClient`) will route through our resolver.
-///
-/// # Proxy resolution order (first non-empty wins per scheme):
-///   1. `SharedPreferences` (user-set from the app Settings screen — highest
-///      priority because it is explicit):
-///       - `http_proxy_url`       → e.g. `http://10.10.1.1:8080`
-///       - `https_proxy_url`      → same (or separate proxy for HTTPS)
-///       - `no_proxy_hosts`       → comma-separated host suffix list,
-///                                   e.g. `localhost,127.0.0.1,.intranet`
-///   2. Dart's `Platform.environment` — works for debug mode via
-///      `--dart-define` or when the process was launched with the standard
-///      POSIX variables `HTTP_PROXY` / `HTTPS_PROXY` / `NO_PROXY`.
-///
-/// # Captive-portal / HTTPS-over-HTTP-proxy helper
-///
-/// Exhausted-data hotspots / corporate proxies often inject a transparent
-/// HTTPS MITM with a self-signed certificate to serve the quota page.
-/// The setting `trust_bad_certs = true` will install a permissive
-/// [badCertificateCallback] so connectivity is not broken by the cert error.
-/// Only flip this on when you *know* you're on a hotspot that does this —
-/// don't leave it on permanently for untrusted networks.
+/// This class fixes both:
+///   1. On startup, reads proxy from Android via a MethodChannel.
+///   2. Wires `client.findProxy = HttpClient.findProxyFromEnvironment` on
+///      EVERY client so resolver below runs for every request.
+///   3. Falls back to POSIX env vars for iOS/desktop/debug.
 class ProxyAwareHttpOverrides extends HttpOverrides {
   ProxyAwareHttpOverrides._(this._config);
 
-  final _ProxyConfig _config;
+  final _SystemProxyConfig _config;
 
-  static const _kPrefHttpProxy = 'http_proxy_url';
-  static const _kPrefHttpsProxy = 'https_proxy_url';
-  static const _kPrefNoProxy = 'no_proxy_hosts';
-  static const _kPrefTrustBad = 'trust_bad_certs';
-  static const _kPrefVerbose = 'proxy_verbose_log';
+  static const _channel = MethodChannel('kokonuts_pos/system_network');
+  static bool _channelRead = false;
+  static _SystemProxyConfig? _lastFetched;
 
-  // ---------------------------------------------------------------------------
-  // Application entry-point helpers
-  // ---------------------------------------------------------------------------
-
-  /// Sets [HttpOverrides.global] to a [ProxyAwareHttpOverrides] instance with
-  /// proxy values resolved from SharedPreferences + `Platform.environment`.
-  ///
-  /// Safe to call multiple times (re-applies with latest preferences).
+  /// Install the override globally.
+  /// Call from `main()` AFTER `WidgetsFlutterBinding.ensureInitialized()`
+  /// and BEFORE `runApp(...)`.
   static Future<ProxyAwareHttpOverrides> apply() async {
-    final cfg = await _ProxyConfig.resolve();
+    final cfg = await _SystemProxyConfig.resolve();
     final overrides = ProxyAwareHttpOverrides._(cfg);
     HttpOverrides.global = overrides;
-    if (cfg.httpProxy != null || cfg.httpsProxy != null || cfg.trustBadCerts) {
+    if (cfg.httpHost != null || cfg.httpsHost != null) {
       debugPrint(
-        '[PROXY] HTTP=${cfg.httpProxy ?? 'DIRECT'}  '
-        'HTTPS=${cfg.httpsProxy ?? 'DIRECT'}  '
-        'NO_PROXY=${cfg.noProxy.isEmpty ? '-' : cfg.noProxy.join(',')}  '
-        'TRUST_BAD_CERTS=${cfg.trustBadCerts}  '
-        'VERBOSE=${cfg.verboseLog}',
+        '[PROXY] HTTP=${cfg.httpHost ?? '?'}:${cfg.httpPort ?? '?'}  '
+        'HTTPS=${cfg.httpsHost ?? '?'}:${cfg.httpsPort ?? '?'}  '
+        'EXCLUDE=${cfg.exclusionList.isEmpty ? '-' : cfg.exclusionList.join(',')}',
       );
+    } else {
+      debugPrint('[PROXY] No system proxy configured — using DIRECT.');
     }
     return overrides;
   }
-
-  /// Shortcut for unit tests / quick overrides — takes plain strings.
-  /// Pass `null` to force DIRECT.
-  static ProxyAwareHttpOverrides applyManual({
-    String? httpProxy,
-    String? httpsProxy,
-    List<String> noProxy = const [],
-    bool trustBadCerts = false,
-  }) {
-    final cfg = _ProxyConfig(
-      httpProxy: _normalizeProxy(httpProxy),
-      httpsProxy: _normalizeProxy(httpsProxy),
-      noProxy: noProxy,
-      trustBadCerts: trustBadCerts,
-      verboseLog: false,
-    );
-    final overrides = ProxyAwareHttpOverrides._(cfg);
-    HttpOverrides.global = overrides;
-    return overrides;
-  }
-
-  /// Returns the currently-active proxy in a human-readable summary, used by
-  /// the "Test Connection" dialog in settings so the user can visually
-  /// confirm which proxy is in effect when debugging failures.
-  static Future<String> summary() async {
-    final c = await _ProxyConfig.resolve();
-    final lines = <String>[
-      'HTTP proxy     : ${c.httpProxy ?? '(direct)'}',
-      'HTTPS proxy    : ${c.httpsProxy ?? '(direct)'}',
-      'Bypass list    : ${c.noProxy.isEmpty ? '—' : c.noProxy.join(', ')}',
-      'Trust bad certs: ${c.trustBadCerts ? 'ON (captive portal friendly)' : 'off'}',
-      'Verbose log    : ${c.verboseLog ? 'on' : 'off'}',
-    ];
-    return lines.join('\n');
-  }
-
-  // ---------------------------------------------------------------------------
-  // HttpOverrides hooks — the actual plumbing
-  // ---------------------------------------------------------------------------
 
   @override
   HttpClient createHttpClient(SecurityContext? context) {
     final client = super.createHttpClient(context);
-
-    // THIS is the line that makes proxying work.
-    // `HttpClient.findProxyFromEnvironment` is a static helper that
-    // delegates to `HttpOverrides.current.findProxyFromEnvironment(url, env)`
-    // — which is the method we override below. Without this assignment,
-    // `findProxyFromEnvironment` is NEVER called and all traffic goes DIRECT.
+    // THIS is the critical wiring — without this line, findProxyFromEnvironment
+    // is NEVER called and every request goes DIRECT.
     client.findProxy = HttpClient.findProxyFromEnvironment;
-
-    // Captive-portal / transparent-HTTPS-interop workaround: install a
-    // permissive callback when the user has explicitly opted in.
-    if (_config.trustBadCerts) {
-      client.badCertificateCallback = (cert, host, port) => true;
-    }
-
-    if (_config.verboseLog) {
-      client.connectionFactory =
-          null; // keep default factory, we just want trace
-    }
-
     return client;
   }
 
   @override
   String findProxyFromEnvironment(Uri url, Map<String, String>? environment) {
-    // User-supplied bypass list.
-    if (_config.noProxy.isNotEmpty &&
-        _matchesBypass(url.host, _config.noProxy)) {
-      if (_config.verboseLog) {
-        debugPrint('[PROXY] $url → DIRECT (bypass match)');
-      }
+    // 1. Respect Android ProxyInfo exclusion list
+    if (_config.exclusionList.isNotEmpty &&
+        _matchesBypass(url.host, _config.exclusionList)) {
       return 'DIRECT';
     }
+    // 2. Per-scheme proxy from Android system layer
     final isHttps = url.scheme == 'https';
-    final proxy = isHttps ? _config.httpsProxy : _config.httpProxy;
-    if (proxy != null && proxy.isNotEmpty) {
-      final authority = _proxyAuthority(proxy);
-      final result = 'PROXY $authority; DIRECT';
-      if (_config.verboseLog) {
-        debugPrint('[PROXY] $url → $result');
-      }
-      return result;
+    final host = isHttps ? _config.httpsHost : _config.httpHost;
+    final port = isHttps ? _config.httpsPort : _config.httpPort;
+    if (host != null && port != null) {
+      return 'PROXY $host:$port; DIRECT';
     }
-
-    if (_config.verboseLog) {
-      debugPrint('[PROXY] $url → DIRECT');
-    }
-    return 'DIRECT';
-  }
-
-  // ---------------------------------------------------------------------------
-  // Parsing helpers
-  // ---------------------------------------------------------------------------
-
-  static String? _normalizeProxy(String? raw) {
-    if (raw == null) return null;
-    final v = raw.trim();
-    if (v.isEmpty) return null;
-    return v;
-  }
-
-  /// Extracts `host:port` from a value that may be written as:
-  ///   - `http://proxy.local:8080`
-  ///   - `https://proxy.local:8080`
-  ///   - `proxy.local:8080`
-  ///   - `user:pass@proxy.local:8080`  (authority form)
-  static String _proxyAuthority(String value) {
-    try {
-      final uri = Uri.parse(value.contains('://') ? value : 'http://$value');
-      if (uri.host.isEmpty) {
-        return value; // give raw value a chance
-      }
-      return '${uri.host}:${uri.hasPort ? uri.port : 80}';
-    } catch (_) {
-      return value;
-    }
+    // 3. Fallback: POSIX env vars (HTTP_PROXY, HTTPS_PROXY, NO_PROXY)
+    return super.findProxyFromEnvironment(url, environment);
   }
 
   static bool _matchesBypass(String host, List<String> patterns) {
@@ -205,147 +87,135 @@ class ProxyAwareHttpOverrides extends HttpOverrides {
     }
     return false;
   }
-
-  // ---------------------------------------------------------------------------
-  // Settings-screen persistence helpers (read/write user-set proxy config).
-  // ---------------------------------------------------------------------------
-
-  /// Returns currently saved proxy values for display in the Settings UI.
-  /// Uses a record to avoid exposing the internal _ProxyConfig type.
-  static Future<
-    ({
-      String? http,
-      String? https,
-      List<String> noProxy,
-      bool trustBadCerts,
-      bool verboseLog,
-    })
-  >
-  readSavedConfig() async {
-    final prefs = await SharedPreferences.getInstance();
-    return (
-      http: _normalizeProxy(prefs.getString(_kPrefHttpProxy)),
-      https: _normalizeProxy(prefs.getString(_kPrefHttpsProxy)),
-      noProxy: _splitHosts(prefs.getString(_kPrefNoProxy)),
-      trustBadCerts: prefs.getBool(_kPrefTrustBad) ?? false,
-      verboseLog: prefs.getBool(_kPrefVerbose) ?? false,
-    );
-  }
-
-  static Future<void> saveConfig({
-    String? httpProxy,
-    String? httpsProxy,
-    String? noProxyCsv,
-    bool? trustBadCerts,
-    bool? verboseLog,
-  }) async {
-    final prefs = await SharedPreferences.getInstance();
-    if (httpProxy == null || httpProxy.trim().isEmpty) {
-      await prefs.remove(_kPrefHttpProxy);
-    } else {
-      await prefs.setString(_kPrefHttpProxy, httpProxy.trim());
-    }
-    if (httpsProxy == null || httpsProxy.trim().isEmpty) {
-      await prefs.remove(_kPrefHttpsProxy);
-    } else {
-      await prefs.setString(_kPrefHttpsProxy, httpsProxy.trim());
-    }
-    if (noProxyCsv == null || noProxyCsv.trim().isEmpty) {
-      await prefs.remove(_kPrefNoProxy);
-    } else {
-      await prefs.setString(_kPrefNoProxy, noProxyCsv.trim());
-    }
-    if (trustBadCerts != null) {
-      await prefs.setBool(_kPrefTrustBad, trustBadCerts);
-    }
-    if (verboseLog != null) {
-      await prefs.setBool(_kPrefVerbose, verboseLog);
-    }
-    // Re-apply immediately so new values take effect for the next HTTP call
-    // without requiring an app restart.
-    await apply();
-  }
-
-  static List<String> _splitHosts(String? raw) {
-    if (raw == null) return const [];
-    return raw
-        .split(',')
-        .map((e) => e.trim())
-        .where((e) => e.isNotEmpty)
-        .toList(growable: false);
-  }
 }
 
-class _ProxyConfig {
-  _ProxyConfig({
-    required this.httpProxy,
-    required this.httpsProxy,
-    required this.noProxy,
-    required this.trustBadCerts,
-    required this.verboseLog,
+class _SystemProxyConfig {
+  _SystemProxyConfig({
+    required this.httpHost,
+    required this.httpPort,
+    required this.httpsHost,
+    required this.httpsPort,
+    required this.exclusionList,
   });
 
-  final String? httpProxy;
-  final String? httpsProxy;
-  final List<String> noProxy;
-  final bool trustBadCerts;
-  final bool verboseLog;
+  final String? httpHost;
+  final int? httpPort;
+  final String? httpsHost;
+  final int? httpsPort;
+  final List<String> exclusionList;
 
-  static Future<_ProxyConfig> resolve() async {
-    final saved = await ProxyAwareHttpOverrides.readSavedConfig();
-    if (saved.http != null ||
-        saved.https != null ||
-        saved.trustBadCerts ||
-        saved.verboseLog) {
-      return _ProxyConfig(
-        httpProxy: saved.http,
-        httpsProxy: saved.https,
-        noProxy: saved.noProxy,
-        trustBadCerts: saved.trustBadCerts,
-        verboseLog: saved.verboseLog,
-      );
+  static Future<_SystemProxyConfig> resolve() async {
+    // Cache to avoid repeated platform calls per app session
+    if (ProxyAwareHttpOverrides._channelRead &&
+        ProxyAwareHttpOverrides._lastFetched != null) {
+      return ProxyAwareHttpOverrides._lastFetched!;
     }
+
+    String? httpHost;
+    int? httpPort;
+    String? httpsHost;
+    int? httpsPort;
+    List<String> exclusionList = const [];
+
+    if (!kIsWeb && Platform.isAndroid) {
+      try {
+        final data = await ProxyAwareHttpOverrides._channel
+            .invokeMapMethod<String, Object>('getSystemProxy');
+        if (data != null) {
+          httpHost = data['httpHost'] as String?;
+          final hp = data['httpPort'];
+          httpPort = hp is int
+              ? hp
+              : (hp is num)
+              ? hp.toInt()
+              : null;
+          httpsHost = data['httpsHost'] as String?;
+          final sp = data['httpsPort'];
+          httpsPort = sp is int
+              ? sp
+              : (sp is num)
+              ? sp.toInt()
+              : null;
+          final ex = data['exclusionList'];
+          if (ex is List) {
+            exclusionList = ex.whereType<String>().toList(growable: false);
+          }
+          ProxyAwareHttpOverrides._lastFetched = _SystemProxyConfig(
+            httpHost: httpHost,
+            httpPort: httpPort,
+            httpsHost: httpsHost,
+            httpsPort: httpsPort,
+            exclusionList: exclusionList,
+          );
+          ProxyAwareHttpOverrides._channelRead = true;
+          return ProxyAwareHttpOverrides._lastFetched!;
+        }
+      } catch (e) {
+        debugPrint('[PROXY] platform read failed: $e');
+      }
+    }
+
+    // Fallback for non-Android: standard POSIX env vars
     final env = Platform.environment;
-    String? envHttp = _firstEnv(env, const ['HTTP_PROXY', 'http_proxy']);
-    String? envHttps = _firstEnv(env, const [
+    httpHost ??= _hostFromEnv(env, const ['HTTP_PROXY', 'http_proxy']);
+    httpPort ??= _portFromEnv(env, const ['HTTP_PROXY', 'http_proxy']);
+    httpsHost ??= _hostFromEnv(env, const [
       'HTTPS_PROXY',
       'https_proxy',
       'HTTP_PROXY',
       'http_proxy',
     ]);
-    final envNo = _firstEnv(env, const ['NO_PROXY', 'no_proxy']);
-    final trustEnv = _firstBoolEnv(env, const [
-      'TRUST_BAD_CERTS',
-      'trust_bad_certs',
+    httpsPort ??= _portFromEnv(env, const [
+      'HTTPS_PROXY',
+      'https_proxy',
+      'HTTP_PROXY',
+      'http_proxy',
     ]);
-    final verboseEnv = _firstBoolEnv(env, const [
-      'PROXY_VERBOSE_LOG',
-      'proxy_verbose_log',
-    ]);
-    return _ProxyConfig(
-      httpProxy: ProxyAwareHttpOverrides._normalizeProxy(envHttp),
-      httpsProxy: ProxyAwareHttpOverrides._normalizeProxy(envHttps),
-      noProxy: ProxyAwareHttpOverrides._splitHosts(envNo),
-      trustBadCerts: trustEnv ?? false,
-      verboseLog: verboseEnv ?? false,
+    final noProxy = env['NO_PROXY'] ?? env['no_proxy'];
+    if (noProxy != null && noProxy.isNotEmpty) {
+      exclusionList = noProxy
+          .split(',')
+          .map((e) => e.trim())
+          .where((e) => e.isNotEmpty)
+          .toList(growable: false);
+    }
+
+    return _SystemProxyConfig(
+      httpHost: httpHost,
+      httpPort: httpPort,
+      httpsHost: httpsHost,
+      httpsPort: httpsPort,
+      exclusionList: exclusionList,
     );
   }
 
   static String? _firstEnv(Map<String, String> env, List<String> keys) {
     for (final k in keys) {
       final v = env[k];
-      if (v != null && v.trim().isNotEmpty) return v;
+      if (v != null && v.trim().isNotEmpty) return v.trim();
     }
     return null;
   }
 
-  static bool? _firstBoolEnv(Map<String, String> env, List<String> keys) {
-    for (final k in keys) {
-      final v = env[k]?.trim().toLowerCase();
-      if (v == null) continue;
-      if (const {'1', 'true', 'yes', 'on'}.contains(v)) return true;
-      if (const {'0', 'false', 'no', 'off'}.contains(v)) return false;
+  static String? _hostFromEnv(Map<String, String> env, List<String> keys) {
+    final v = _firstEnv(env, keys);
+    if (v == null) return null;
+    try {
+      final uri = Uri.parse(v.contains('://') ? v : 'http://$v');
+      return uri.host.isEmpty ? null : uri.host;
+    } catch (_) {
+      return null;
     }
-    return null;
+  }
+
+  static int? _portFromEnv(Map<String, String> env, List<String> keys) {
+    final v = _firstEnv(env, keys);
+    if (v == null) return null;
+    try {
+      final uri = Uri.parse(v.contains('://') ? v : 'http://$v');
+      return uri.hasPort ? uri.port : null;
+    } catch (_) {
+      return null;
+    }
   }
 }
