@@ -77,12 +77,12 @@ class MainActivity : FlutterActivity() {
 
         val httpHost = (info?.host?.takeIf { it.isNotEmpty() } ?: fallbackHost)
         val httpPort = (info?.port?.takeIf { it > 0 } ?: fallbackPort) ?: 0
-        val rawList: List<String?>? = info?.exclusionList
-        val exclusionList = if (rawList.isNullOrEmpty()) {
+        val rawArray: Array<String?>? = info?.exclusionList
+        val exclusionList = if (rawArray.isNullOrEmpty()) {
             emptyList<String>()
         } else {
-            val out = ArrayList<String>(rawList.size)
-            for (item in rawList) if (item != null) out.add(item)
+            val out = ArrayList<String>(rawArray.size)
+            for (item in rawArray) if (item != null) out.add(item)
             out
         }
 
