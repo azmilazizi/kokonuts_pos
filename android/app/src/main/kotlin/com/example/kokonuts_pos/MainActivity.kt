@@ -77,7 +77,7 @@ class MainActivity : FlutterActivity() {
 
         val httpHost = (info?.host?.takeIf { it.isNotEmpty() } ?: fallbackHost)
         val httpPort = (info?.port?.takeIf { it > 0 } ?: fallbackPort) ?: 0
-        val exclusionList: List<String> = (info?.exclusionList ?: emptyList<String>()).filterNotNull()
+        val exclusionList: List<String> = (info?.exclusionList ?: emptyList<String>()).mapNotNull { it }
 
         return mapOf(
             "httpHost" to httpHost,
