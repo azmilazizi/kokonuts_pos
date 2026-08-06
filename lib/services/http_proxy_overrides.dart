@@ -7,7 +7,16 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// `http` package, Dio, and every other `dart:io`-based client) to honor the
 /// hotspot / carrier's HTTP proxy.
 ///
-/// Proxy resolution order (first non-empty wins per scheme):
+/// # Why this works
+///
+/// Simply overriding [findProxyFromEnvironment] is **not** enough.
+/// The default `HttpClient` has `findProxy == null` (i.e. always DIRECT)
+/// unless you explicitly assign it to `HttpClient.findProxyFromEnvironment`.
+/// This class does that for **every** client returned by [createHttpClient] —
+/// so every `new HttpClient()` (including the one wrapped by `package:http`'s
+/// default `IOClient`) will route through our resolver.
+///
+/// # Proxy resolution order (first non-empty wins per scheme):
 ///   1. `SharedPreferences` (user-set from the app Settings screen — highest
 ///      priority because it is explicit):
 ///       - `http_proxy_url`       → e.g. `http://10.10.1.1:8080`
@@ -18,16 +27,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 ///      `--dart-define` or when the process was launched with the standard
 ///      POSIX variables `HTTP_PROXY` / `HTTPS_PROXY` / `NO_PROXY`.
 ///
-/// The `findProxy` callback uses the standard `PROXY host:port; DIRECT`
-/// format that `HttpClient` expects — this is the exact value Chrome / curl
-/// hand off to the system resolver.
+/// # Captive-portal / HTTPS-over-HTTP-proxy helper
 ///
-/// Usage: call [ProxyAwareHttpOverrides.apply] as early as possible in `main`
-/// (after `WidgetsFlutterBinding.ensureInitialized()` so SharedPreferences is
-/// reachable) and **before** `runApp(...)`. All HTTP clients created with
-/// `new HttpClient()` — including the default `http.Client()` used by the
-/// app's `ApiClient` — will then consult this override automatically for
-/// *every* request.
+/// Exhausted-data hotspots / corporate proxies often inject a transparent
+/// HTTPS MITM with a self-signed certificate to serve the quota page.
+/// The setting `trust_bad_certs = true` will install a permissive
+/// [badCertificateCallback] so connectivity is not broken by the cert error.
+/// Only flip this on when you *know* you're on a hotspot that does this —
+/// don't leave it on permanently for untrusted networks.
 class ProxyAwareHttpOverrides extends HttpOverrides {
   ProxyAwareHttpOverrides._(this._config);
 
@@ -36,6 +43,12 @@ class ProxyAwareHttpOverrides extends HttpOverrides {
   static const _kPrefHttpProxy = 'http_proxy_url';
   static const _kPrefHttpsProxy = 'https_proxy_url';
   static const _kPrefNoProxy = 'no_proxy_hosts';
+  static const _kPrefTrustBad = 'trust_bad_certs';
+  static const _kPrefVerbose = 'proxy_verbose_log';
+
+  // ---------------------------------------------------------------------------
+  // Application entry-point helpers
+  // ---------------------------------------------------------------------------
 
   /// Sets [HttpOverrides.global] to a [ProxyAwareHttpOverrides] instance with
   /// proxy values resolved from SharedPreferences + `Platform.environment`.
@@ -45,11 +58,13 @@ class ProxyAwareHttpOverrides extends HttpOverrides {
     final cfg = await _ProxyConfig.resolve();
     final overrides = ProxyAwareHttpOverrides._(cfg);
     HttpOverrides.global = overrides;
-    if (cfg.httpProxy != null || cfg.httpsProxy != null) {
+    if (cfg.httpProxy != null || cfg.httpsProxy != null || cfg.trustBadCerts) {
       debugPrint(
         '[PROXY] HTTP=${cfg.httpProxy ?? 'DIRECT'}  '
         'HTTPS=${cfg.httpsProxy ?? 'DIRECT'}  '
-        'NO_PROXY=${cfg.noProxy.join(',')}',
+        'NO_PROXY=${cfg.noProxy.isEmpty ? '-' : cfg.noProxy.join(',')}  '
+        'TRUST_BAD_CERTS=${cfg.trustBadCerts}  '
+        'VERBOSE=${cfg.verboseLog}',
       );
     }
     return overrides;
@@ -61,38 +76,94 @@ class ProxyAwareHttpOverrides extends HttpOverrides {
     String? httpProxy,
     String? httpsProxy,
     List<String> noProxy = const [],
+    bool trustBadCerts = false,
   }) {
     final cfg = _ProxyConfig(
       httpProxy: _normalizeProxy(httpProxy),
       httpsProxy: _normalizeProxy(httpsProxy),
       noProxy: noProxy,
+      trustBadCerts: trustBadCerts,
+      verboseLog: false,
     );
     final overrides = ProxyAwareHttpOverrides._(cfg);
     HttpOverrides.global = overrides;
     return overrides;
   }
 
+  /// Returns the currently-active proxy in a human-readable summary, used by
+  /// the "Test Connection" dialog in settings so the user can visually
+  /// confirm which proxy is in effect when debugging failures.
+  static Future<String> summary() async {
+    final c = await _ProxyConfig.resolve();
+    final lines = <String>[
+      'HTTP proxy     : ${c.httpProxy ?? '(direct)'}',
+      'HTTPS proxy    : ${c.httpsProxy ?? '(direct)'}',
+      'Bypass list    : ${c.noProxy.isEmpty ? '—' : c.noProxy.join(', ')}',
+      'Trust bad certs: ${c.trustBadCerts ? 'ON (captive portal friendly)' : 'off'}',
+      'Verbose log    : ${c.verboseLog ? 'on' : 'off'}',
+    ];
+    return lines.join('\n');
+  }
+
+  // ---------------------------------------------------------------------------
+  // HttpOverrides hooks — the actual plumbing
+  // ---------------------------------------------------------------------------
+
   @override
   HttpClient createHttpClient(SecurityContext? context) {
     final client = super.createHttpClient(context);
+
+    // THIS is the line that makes proxying work.
+    // `HttpClient.findProxyFromEnvironment` is a static helper that
+    // delegates to `HttpOverrides.current.findProxyFromEnvironment(url, env)`
+    // — which is the method we override below. Without this assignment,
+    // `findProxyFromEnvironment` is NEVER called and all traffic goes DIRECT.
+    client.findProxy = HttpClient.findProxyFromEnvironment;
+
+    // Captive-portal / transparent-HTTPS-interop workaround: install a
+    // permissive callback when the user has explicitly opted in.
+    if (_config.trustBadCerts) {
+      client.badCertificateCallback = (cert, host, port) => true;
+    }
+
+    if (_config.verboseLog) {
+      client.connectionFactory =
+          null; // keep default factory, we just want trace
+    }
+
     return client;
   }
 
   @override
   String findProxyFromEnvironment(Uri url, Map<String, String>? environment) {
-    final bypass = _config.noProxy;
-    if (bypass.isNotEmpty && _matchesBypass(url.host, bypass)) {
+    // User-supplied bypass list.
+    if (_config.noProxy.isNotEmpty &&
+        _matchesBypass(url.host, _config.noProxy)) {
+      if (_config.verboseLog) {
+        debugPrint('[PROXY] $url → DIRECT (bypass match)');
+      }
       return 'DIRECT';
     }
     final isHttps = url.scheme == 'https';
     final proxy = isHttps ? _config.httpsProxy : _config.httpProxy;
     if (proxy != null && proxy.isNotEmpty) {
-      // Convert "http://host:port" or "host:port" into "PROXY host:port".
       final authority = _proxyAuthority(proxy);
-      return 'PROXY $authority; DIRECT';
+      final result = 'PROXY $authority; DIRECT';
+      if (_config.verboseLog) {
+        debugPrint('[PROXY] $url → $result');
+      }
+      return result;
+    }
+
+    if (_config.verboseLog) {
+      debugPrint('[PROXY] $url → DIRECT');
     }
     return 'DIRECT';
   }
+
+  // ---------------------------------------------------------------------------
+  // Parsing helpers
+  // ---------------------------------------------------------------------------
 
   static String? _normalizeProxy(String? raw) {
     if (raw == null) return null;
@@ -109,9 +180,11 @@ class ProxyAwareHttpOverrides extends HttpOverrides {
   static String _proxyAuthority(String value) {
     try {
       final uri = Uri.parse(value.contains('://') ? value : 'http://$value');
+      if (uri.host.isEmpty) {
+        return value; // give raw value a chance
+      }
       return '${uri.host}:${uri.hasPort ? uri.port : 80}';
     } catch (_) {
-      // Fallback: use raw value as-is — HttpClient will still try it.
       return value;
     }
   }
@@ -121,14 +194,12 @@ class ProxyAwareHttpOverrides extends HttpOverrides {
       final p = pat.trim().toLowerCase();
       if (p.isEmpty) continue;
       final h = host.toLowerCase();
-      // Leading dot — suffix match: `.intranet` matches `foo.intranet`.
       if (p.startsWith('.')) {
         if (h.endsWith(p) || h == p.substring(1)) return true;
       } else if (p.startsWith('*')) {
         final suffix = p.substring(1);
         if (h.endsWith(suffix)) return true;
       } else {
-        // Exact match OR suffix match on subdomain boundaries.
         if (h == p || h.endsWith('.$p')) return true;
       }
     }
@@ -141,13 +212,23 @@ class ProxyAwareHttpOverrides extends HttpOverrides {
 
   /// Returns currently saved proxy values for display in the Settings UI.
   /// Uses a record to avoid exposing the internal _ProxyConfig type.
-  static Future<({String? http, String? https, List<String> noProxy})>
+  static Future<
+    ({
+      String? http,
+      String? https,
+      List<String> noProxy,
+      bool trustBadCerts,
+      bool verboseLog,
+    })
+  >
   readSavedConfig() async {
     final prefs = await SharedPreferences.getInstance();
     return (
       http: _normalizeProxy(prefs.getString(_kPrefHttpProxy)),
       https: _normalizeProxy(prefs.getString(_kPrefHttpsProxy)),
       noProxy: _splitHosts(prefs.getString(_kPrefNoProxy)),
+      trustBadCerts: prefs.getBool(_kPrefTrustBad) ?? false,
+      verboseLog: prefs.getBool(_kPrefVerbose) ?? false,
     );
   }
 
@@ -155,6 +236,8 @@ class ProxyAwareHttpOverrides extends HttpOverrides {
     String? httpProxy,
     String? httpsProxy,
     String? noProxyCsv,
+    bool? trustBadCerts,
+    bool? verboseLog,
   }) async {
     final prefs = await SharedPreferences.getInstance();
     if (httpProxy == null || httpProxy.trim().isEmpty) {
@@ -171,6 +254,12 @@ class ProxyAwareHttpOverrides extends HttpOverrides {
       await prefs.remove(_kPrefNoProxy);
     } else {
       await prefs.setString(_kPrefNoProxy, noProxyCsv.trim());
+    }
+    if (trustBadCerts != null) {
+      await prefs.setBool(_kPrefTrustBad, trustBadCerts);
+    }
+    if (verboseLog != null) {
+      await prefs.setBool(_kPrefVerbose, verboseLog);
     }
     // Re-apply immediately so new values take effect for the next HTTP call
     // without requiring an app restart.
@@ -192,19 +281,28 @@ class _ProxyConfig {
     required this.httpProxy,
     required this.httpsProxy,
     required this.noProxy,
+    required this.trustBadCerts,
+    required this.verboseLog,
   });
 
   final String? httpProxy;
   final String? httpsProxy;
   final List<String> noProxy;
+  final bool trustBadCerts;
+  final bool verboseLog;
 
   static Future<_ProxyConfig> resolve() async {
     final saved = await ProxyAwareHttpOverrides.readSavedConfig();
-    if (saved.http != null || saved.https != null) {
+    if (saved.http != null ||
+        saved.https != null ||
+        saved.trustBadCerts ||
+        saved.verboseLog) {
       return _ProxyConfig(
         httpProxy: saved.http,
         httpsProxy: saved.https,
         noProxy: saved.noProxy,
+        trustBadCerts: saved.trustBadCerts,
+        verboseLog: saved.verboseLog,
       );
     }
     final env = Platform.environment;
@@ -216,10 +314,20 @@ class _ProxyConfig {
       'http_proxy',
     ]);
     final envNo = _firstEnv(env, const ['NO_PROXY', 'no_proxy']);
+    final trustEnv = _firstBoolEnv(env, const [
+      'TRUST_BAD_CERTS',
+      'trust_bad_certs',
+    ]);
+    final verboseEnv = _firstBoolEnv(env, const [
+      'PROXY_VERBOSE_LOG',
+      'proxy_verbose_log',
+    ]);
     return _ProxyConfig(
       httpProxy: ProxyAwareHttpOverrides._normalizeProxy(envHttp),
       httpsProxy: ProxyAwareHttpOverrides._normalizeProxy(envHttps),
       noProxy: ProxyAwareHttpOverrides._splitHosts(envNo),
+      trustBadCerts: trustEnv ?? false,
+      verboseLog: verboseEnv ?? false,
     );
   }
 
@@ -227,6 +335,16 @@ class _ProxyConfig {
     for (final k in keys) {
       final v = env[k];
       if (v != null && v.trim().isNotEmpty) return v;
+    }
+    return null;
+  }
+
+  static bool? _firstBoolEnv(Map<String, String> env, List<String> keys) {
+    for (final k in keys) {
+      final v = env[k]?.trim().toLowerCase();
+      if (v == null) continue;
+      if (const {'1', 'true', 'yes', 'on'}.contains(v)) return true;
+      if (const {'0', 'false', 'no', 'off'}.contains(v)) return false;
     }
     return null;
   }

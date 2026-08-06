@@ -305,11 +305,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final SecureStore _secureStore = const SecureStore();
   final TextInputFormatter _currencyFormatter = _CurrencyTextInputFormatter();
   ApiStatus? _syncStatus;
+  String? _lastProxySummary;
   bool _isSyncLoading = false;
   bool _isSigningOut = false;
   String? _warehouseCode;
   String? _activationEmail;
-
 
   // Initial sync gate shown right after login.
   bool _showInitialSync = true;
@@ -381,7 +381,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
       description: 'Customize preferences and manage staff access.',
     ),
   ];
-
 
   void _toggleSidebar() {
     setState(() {
@@ -487,7 +486,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
     setState(() {
       _warehouseCode = results[0];
       _activationEmail = results[1];
-
     });
   }
 
@@ -539,8 +537,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
       setState(() {
         _shiftOpen = cachedOpen;
         _shiftId = cachedId;
-        _shiftOpenedAt =
-            cachedOpenedAt != null ? DateTime.tryParse(cachedOpenedAt) : null;
+        _shiftOpenedAt = cachedOpenedAt != null
+            ? DateTime.tryParse(cachedOpenedAt)
+            : null;
       });
     }
 
@@ -580,8 +579,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
       } else {
         final shiftId = data['id']?.toString();
         final openedAtRaw = data['opened_at']?.toString();
-        final openedAt =
-            openedAtRaw != null ? DateTime.tryParse(openedAtRaw) : null;
+        final openedAt = openedAtRaw != null
+            ? DateTime.tryParse(openedAtRaw)
+            : null;
 
         // If we already have a locally-cached shift that differs from what the
         // server returned, the server shift belongs to another device on the
@@ -642,7 +642,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
         '/pos/api/v1/shifts/current',
         authToken: token,
       );
-      final shiftData = (response.data['data'] as Map<String, dynamic>?) ?? response.data;
+      final shiftData =
+          (response.data['data'] as Map<String, dynamic>?) ?? response.data;
       shiftId = shiftData['id']?.toString();
     }
 
@@ -740,8 +741,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
   Future<void> _loadReceiptDetail(String receiptNumber) async {
     try {
       final token = await _secureStore.readToken() ?? '';
-      final detail =
-          await ReceiptService().fetchReceiptDetail(token, receiptNumber);
+      final detail = await ReceiptService().fetchReceiptDetail(
+        token,
+        receiptNumber,
+      );
       if (!mounted) return;
       setState(() {
         _selectedReceiptDetail = detail;
@@ -754,7 +757,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   Future<void> _sendToKitchen(
-      ReceiptSummary receipt, ReceiptDetail detail) async {
+    ReceiptSummary receipt,
+    ReceiptDetail detail,
+  ) async {
     final kitchenMac = await PrinterConfigService().getKitchenPrinterMac();
     if (kitchenMac == null || kitchenMac.isEmpty) {
       if (!mounted) return;
@@ -791,9 +796,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
       await _labelPrinter.disconnect();
     }
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Sent to kitchen.')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Sent to kitchen.')));
   }
 
   Future<void> _processCancel(ReceiptSummary receipt, String reason) async {
@@ -808,9 +813,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
       });
     } on ApiException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to cancel: ${e.message}')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to cancel: ${e.message}')));
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -826,10 +831,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     final refundItems = _refundQtys.entries
         .where((e) => e.value > 0 && e.key < detail.lineItems.length)
-        .map((e) => (
-              lineItemId: detail.lineItems[e.key].id,
-              quantity: e.value,
-            ))
+        .map((e) => (lineItemId: detail.lineItems[e.key].id, quantity: e.value))
         .toList();
 
     final refundTotal = _refundQtys.entries.fold<double>(0, (sum, e) {
@@ -842,12 +844,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
     setState(() => _isProcessingRefund = true);
     try {
       final token = await _secureStore.readToken() ?? '';
-      await ReceiptService().refundReceipt(token, detail.id, refundTotal, refundItems);
+      await ReceiptService().refundReceipt(
+        token,
+        detail.id,
+        refundTotal,
+        refundItems,
+      );
       if (!mounted) return;
       SunmiPrinterService().openCashDrawer();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Refund of RM${refundTotal.toStringAsFixed(2)} processed.'),
+          content: Text(
+            'Refund of RM${refundTotal.toStringAsFixed(2)} processed.',
+          ),
         ),
       );
       setState(() {
@@ -885,7 +894,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
   // ── Shift ─────────────────────────────────────────────────────────────────
 
   Future<void> _closeShiftWithFeedback(
-      BuildContext context, double actualCash) async {
+    BuildContext context,
+    double actualCash,
+  ) async {
     final messenger = ScaffoldMessenger.of(context);
     try {
       await _closeShift(actualCash);
@@ -967,26 +978,31 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                         amountCtrl.text.replaceAll(',', ''),
                                       ) ??
                                       0.0;
-                                  final messenger =
-                                      ScaffoldMessenger.of(context);
+                                  final messenger = ScaffoldMessenger.of(
+                                    context,
+                                  );
                                   setDialog(() => isSubmitting = true);
                                   try {
-                                    final token =
-                                        await _secureStore.readToken();
+                                    final token = await _secureStore
+                                        .readToken();
                                     final res = await _apiClient.postJson(
                                       '/pos/api/v1/shifts/open',
                                       body: {'opening_float': amount},
                                       authToken: token,
                                     );
-                                    final resData = (res.data['data'] as Map<String, dynamic>?) ?? res.data;
-                                    final shiftId =
-                                        resData['id']?.toString();
+                                    final resData =
+                                        (res.data['data']
+                                            as Map<String, dynamic>?) ??
+                                        res.data;
+                                    final shiftId = resData['id']?.toString();
                                     final prefs =
                                         await SharedPreferences.getInstance();
                                     await prefs.setBool('shift_is_open', true);
                                     if (shiftId != null) {
                                       await prefs.setString(
-                                          'shift_id', shiftId);
+                                        'shift_id',
+                                        shiftId,
+                                      );
                                     }
                                     await prefs.setString(
                                       'shift_opened_at',
@@ -1284,65 +1300,70 @@ class _RegisterScreenState extends State<RegisterScreen> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialog) => AlertDialog(
-        backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        titlePadding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
-        contentPadding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
-        title: const Text(
-          'Amount Confirmation',
-          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 17),
-          textAlign: TextAlign.center,
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Are you sure the amount is ${amount.toStringAsFixed(2)}?'),
-            const SizedBox(height: 12),
-            const Text(
-              'Note: Please check if you have any open orders.\n'
-              'If you do have open orders, we recommend you close them',
-              style: TextStyle(fontSize: 13, color: Color(0xFF757575)),
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          titlePadding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+          contentPadding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+          title: const Text(
+            'Amount Confirmation',
+            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 17),
+            textAlign: TextAlign.center,
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Are you sure the amount is ${amount.toStringAsFixed(2)}?'),
+              const SizedBox(height: 12),
+              const Text(
+                'Note: Please check if you have any open orders.\n'
+                'If you do have open orders, we recommend you close them',
+                style: TextStyle(fontSize: 13, color: Color(0xFF757575)),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: isSubmitting ? null : () => Navigator.pop(ctx),
+              child: const Text(
+                'CANCEL',
+                style: TextStyle(
+                  color: Color(0xFF757575),
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1,
+                ),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: isSubmitting
+                  ? null
+                  : () async {
+                      setDialog(() => isSubmitting = true);
+                      await _closeShiftWithFeedback(ctx, amount);
+                      if (ctx.mounted) Navigator.pop(ctx);
+                    },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFE67E22),
+                foregroundColor: Colors.white,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: const Text(
+                'CONTINUE',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.5,
+                ),
+              ),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: isSubmitting ? null : () => Navigator.pop(ctx),
-            child: const Text(
-              'CANCEL',
-              style: TextStyle(
-                color: Color(0xFF757575),
-                fontWeight: FontWeight.w700,
-                letterSpacing: 1,
-              ),
-            ),
-          ),
-          ElevatedButton(
-            onPressed: isSubmitting
-                ? null
-                : () async {
-                    setDialog(() => isSubmitting = true);
-                    await _closeShiftWithFeedback(ctx, amount);
-                    if (ctx.mounted) Navigator.pop(ctx);
-                  },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFE67E22),
-              foregroundColor: Colors.white,
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            child: const Text(
-              'CONTINUE',
-              style: TextStyle(fontWeight: FontWeight.w700, letterSpacing: 0.5),
-            ),
-          ),
-        ],
       ),
-    ),
-  );
+    );
   }
 
   Widget _buildCloseShiftContent() {
@@ -1464,13 +1485,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
       _isSyncLoading = true;
     });
 
-    final status = await _apiClient.ping();
+    final pingFuture = _apiClient.ping();
+    final summaryFuture = ProxyAwareHttpOverrides.summary();
+    final results = await Future.wait([pingFuture, summaryFuture]);
+    final status = results[0] as ApiStatus;
+    final summary = results[1] as String;
     if (!mounted) {
       return;
     }
 
     setState(() {
       _syncStatus = status;
+      _lastProxySummary = summary;
       _isSyncLoading = false;
     });
   }
@@ -1511,7 +1537,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   Widget _buildTransactionsContent() {
-    if (_isRefundMode && _selectedReceipt != null && _selectedReceiptDetail != null) {
+    if (_isRefundMode &&
+        _selectedReceipt != null &&
+        _selectedReceiptDetail != null) {
       return _buildRefundPanel();
     }
 
@@ -1601,208 +1629,218 @@ class _RegisterScreenState extends State<RegisterScreen> {
           child: _isLoadingReceipts && _receipts.isEmpty
               ? const Center(child: CircularProgressIndicator())
               : _receiptsError != null && _receipts.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(_receiptsError!,
-                              style: const TextStyle(color: Color(0xFF9E9E9E))),
-                          const SizedBox(height: 12),
-                          TextButton(
-                            onPressed: () => _loadReceipts(reset: true),
-                            child: const Text('Retry'),
-                          ),
-                        ],
+              ? Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        _receiptsError!,
+                        style: const TextStyle(color: Color(0xFF9E9E9E)),
                       ),
-                    )
-                  : groups.isEmpty
-                      ? const Center(
-                          child: Text('No receipts found.',
-                              style: TextStyle(color: Color(0xFF9E9E9E))),
-                        )
-                      : RefreshIndicator(
-                          onRefresh: () => _loadReceipts(reset: true),
-                          child: ListView.builder(
-                          itemCount: itemCount,
-                          itemBuilder: (context, index) {
-                            // Load-more row at the very end
-                            if (index == totalItems) {
-                              return Padding(
-                                padding: const EdgeInsets.symmetric(vertical: 16),
-                                child: Center(
-                                  child: _isLoadingMoreReceipts
-                                      ? const CircularProgressIndicator()
-                                      : TextButton(
-                                          onPressed: _loadMoreReceipts,
-                                          child: const Text('Load more'),
-                                        ),
-                                ),
-                              );
-                            }
-                            int cursor = 0;
-                            for (final group in groups) {
-                              if (index == cursor) {
-                                return Padding(
-                                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
-                                  child: Text(
-                                    group.$1,
-                                    style: const TextStyle(
-                                      color: Color(0xFFE67E22),
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 13,
-                                    ),
+                      const SizedBox(height: 12),
+                      TextButton(
+                        onPressed: () => _loadReceipts(reset: true),
+                        child: const Text('Retry'),
+                      ),
+                    ],
+                  ),
+                )
+              : groups.isEmpty
+              ? const Center(
+                  child: Text(
+                    'No receipts found.',
+                    style: TextStyle(color: Color(0xFF9E9E9E)),
+                  ),
+                )
+              : RefreshIndicator(
+                  onRefresh: () => _loadReceipts(reset: true),
+                  child: ListView.builder(
+                    itemCount: itemCount,
+                    itemBuilder: (context, index) {
+                      // Load-more row at the very end
+                      if (index == totalItems) {
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          child: Center(
+                            child: _isLoadingMoreReceipts
+                                ? const CircularProgressIndicator()
+                                : TextButton(
+                                    onPressed: _loadMoreReceipts,
+                                    child: const Text('Load more'),
                                   ),
-                                );
-                              }
-                              cursor++;
-                              for (final receipt in group.$2) {
-                                if (index == cursor) {
-                                  final rn = receipt.receiptNumber;
-                                  final isSelected =
-                                      _selectedReceipt?.receiptNumber == rn;
-                                  return Column(
-                                    children: [
-                                      InkWell(
-                                        onTap: () {
-                                          setState(() {
-                                            _selectedReceipt = receipt;
-                                            _selectedReceiptDetail = null;
-                                            _isLoadingDetail = true;
-                                            _isRefundMode = false;
-                                          });
-                                          _loadReceiptDetail(rn);
-                                        },
-                                        child: Container(
-                                          color: isSelected
-                                              ? const Color(0xFFF0F4FF)
-                                              : Colors.white,
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 16,
-                                            vertical: 12,
+                          ),
+                        );
+                      }
+                      int cursor = 0;
+                      for (final group in groups) {
+                        if (index == cursor) {
+                          return Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
+                            child: Text(
+                              group.$1,
+                              style: const TextStyle(
+                                color: Color(0xFFE67E22),
+                                fontWeight: FontWeight.w600,
+                                fontSize: 13,
+                              ),
+                            ),
+                          );
+                        }
+                        cursor++;
+                        for (final receipt in group.$2) {
+                          if (index == cursor) {
+                            final rn = receipt.receiptNumber;
+                            final isSelected =
+                                _selectedReceipt?.receiptNumber == rn;
+                            return Column(
+                              children: [
+                                InkWell(
+                                  onTap: () {
+                                    setState(() {
+                                      _selectedReceipt = receipt;
+                                      _selectedReceiptDetail = null;
+                                      _isLoadingDetail = true;
+                                      _isRefundMode = false;
+                                    });
+                                    _loadReceiptDetail(rn);
+                                  },
+                                  child: Container(
+                                    color: isSelected
+                                        ? const Color(0xFFF0F4FF)
+                                        : Colors.white,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 12,
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Container(
+                                          width: 40,
+                                          height: 40,
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFFF5F5F5),
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
                                           ),
-                                          child: Row(
+                                          child: Icon(
+                                            receipt.paymentType.toUpperCase() ==
+                                                    'CASH'
+                                                ? Icons.payments
+                                                : Icons.credit_card,
+                                            size: 20,
+                                            color: const Color(0xFF757575),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
                                             children: [
-                                              Container(
-                                                width: 40,
-                                                height: 40,
-                                                decoration: BoxDecoration(
-                                                  color: const Color(0xFFF5F5F5),
-                                                  borderRadius:
-                                                      BorderRadius.circular(8),
-                                                ),
-                                                child: Icon(
-                                                  receipt.paymentType
-                                                              .toUpperCase() ==
-                                                          'CASH'
-                                                      ? Icons.payments
-                                                      : Icons.credit_card,
-                                                  size: 20,
-                                                  color: const Color(0xFF757575),
-                                                ),
-                                              ),
-                                              const SizedBox(width: 12),
-                                              Expanded(
-                                                child: Column(
-                                                  crossAxisAlignment:
-                                                      CrossAxisAlignment.start,
-                                                  children: [
-                                                    Row(
-                                                      children: [
-                                                        Text(
-                                                          receipt.formattedTotal,
-                                                          style: const TextStyle(
-                                                            fontWeight:
-                                                                FontWeight.w600,
-                                                          ),
-                                                        ),
-                                                        if (receipt.sourceLabel.isNotEmpty &&
-                                                            receipt.source.toUpperCase() != 'POS') ...[
-                                                          const SizedBox(width: 8),
-                                                          _buildSourceBadge(
-                                                              receipt.sourceLabel),
-                                                        ],
-                                                      ],
-                                                    ),
-                                                    Text(
-                                                      receipt.formattedTime,
-                                                      style: const TextStyle(
-                                                        fontSize: 13,
-                                                        color: Color(0xFF9E9E9E),
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                              Column(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.end,
+                                              Row(
                                                 children: [
                                                   Text(
-                                                    '#${receipt.queueNumber ?? ''}',
+                                                    receipt.formattedTotal,
                                                     style: const TextStyle(
-                                                      fontSize: 13,
-                                                      color: Color(0xFF9E9E9E),
+                                                      fontWeight:
+                                                          FontWeight.w600,
                                                     ),
                                                   ),
-                                                  if (_receiptStatuses[rn] !=
-                                                      null) ...[
-                                                    const SizedBox(height: 4),
-                                                    Container(
-                                                      padding: const EdgeInsets
-                                                          .symmetric(
-                                                        horizontal: 8,
-                                                        vertical: 2,
-                                                      ),
-                                                      decoration: BoxDecoration(
-                                                        color: _receiptStatuses[
-                                                                    rn] ==
-                                                                'cancelled'
-                                                            ? const Color(
-                                                                0xFFFFEBEE)
-                                                            : const Color(
-                                                                0xFFE8F5E9),
-                                                        borderRadius:
-                                                            BorderRadius
-                                                                .circular(10),
-                                                      ),
-                                                      child: Text(
-                                                        _receiptStatuses[rn] ==
-                                                                'cancelled'
-                                                            ? 'Cancelled'
-                                                            : 'Refunded',
-                                                        style: TextStyle(
-                                                          fontSize: 11,
-                                                          fontWeight:
-                                                              FontWeight.w600,
-                                                          color: _receiptStatuses[
-                                                                      rn] ==
-                                                                  'cancelled'
-                                                              ? const Color(
-                                                                  0xFFD32F2F)
-                                                              : const Color(
-                                                                  0xFF388E3C),
-                                                        ),
-                                                      ),
+                                                  if (receipt
+                                                          .sourceLabel
+                                                          .isNotEmpty &&
+                                                      receipt.source
+                                                              .toUpperCase() !=
+                                                          'POS') ...[
+                                                    const SizedBox(width: 8),
+                                                    _buildSourceBadge(
+                                                      receipt.sourceLabel,
                                                     ),
                                                   ],
                                                 ],
                                               ),
+                                              Text(
+                                                receipt.formattedTime,
+                                                style: const TextStyle(
+                                                  fontSize: 13,
+                                                  color: Color(0xFF9E9E9E),
+                                                ),
+                                              ),
                                             ],
                                           ),
                                         ),
-                                      ),
-                                      const Divider(
-                                          height: 1, indent: 68, endIndent: 0),
-                                    ],
-                                  );
-                                }
-                                cursor++;
-                              }
-                            }
-                            return const SizedBox.shrink();
-                          },
-                        ),
-                        ),
+                                        Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.end,
+                                          children: [
+                                            Text(
+                                              '#${receipt.queueNumber ?? ''}',
+                                              style: const TextStyle(
+                                                fontSize: 13,
+                                                color: Color(0xFF9E9E9E),
+                                              ),
+                                            ),
+                                            if (_receiptStatuses[rn] !=
+                                                null) ...[
+                                              const SizedBox(height: 4),
+                                              Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 8,
+                                                      vertical: 2,
+                                                    ),
+                                                decoration: BoxDecoration(
+                                                  color:
+                                                      _receiptStatuses[rn] ==
+                                                          'cancelled'
+                                                      ? const Color(0xFFFFEBEE)
+                                                      : const Color(0xFFE8F5E9),
+                                                  borderRadius:
+                                                      BorderRadius.circular(10),
+                                                ),
+                                                child: Text(
+                                                  _receiptStatuses[rn] ==
+                                                          'cancelled'
+                                                      ? 'Cancelled'
+                                                      : 'Refunded',
+                                                  style: TextStyle(
+                                                    fontSize: 11,
+                                                    fontWeight: FontWeight.w600,
+                                                    color:
+                                                        _receiptStatuses[rn] ==
+                                                            'cancelled'
+                                                        ? const Color(
+                                                            0xFFD32F2F,
+                                                          )
+                                                        : const Color(
+                                                            0xFF388E3C,
+                                                          ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                                const Divider(
+                                  height: 1,
+                                  indent: 68,
+                                  endIndent: 0,
+                                ),
+                              ],
+                            );
+                          }
+                          cursor++;
+                        }
+                      }
+                      return const SizedBox.shrink();
+                    },
+                  ),
+                ),
         ),
       ],
     );
@@ -1902,11 +1940,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 icon: const Icon(Icons.more_vert, color: Color(0xFF212121)),
                 tooltip: 'More options',
                 onSelected: (val) async {
-                  if ((val == 'print' || val == 'print_cashback') && detail != null) {
+                  if ((val == 'print' || val == 'print_cashback') &&
+                      detail != null) {
                     final payment = detail.payments.isNotEmpty
                         ? detail.payments.first
                         : null;
-                    final isFdOrder = receipt.source.isNotEmpty &&
+                    final isFdOrder =
+                        receipt.source.isNotEmpty &&
                         receipt.source.toUpperCase() != 'POS';
                     SunmiPrinterService().printReceipt(
                       PrintReceiptData(
@@ -1918,25 +1958,34 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         date: receipt.shortDatetime.split(' ').first,
                         time: receipt.formattedTime,
                         paymentMethod: receipt.paymentMethod,
-                        cashbackQrUrl: val == 'print_cashback' ? detail.cashbackQrUrl : null,
-                        cashbackQrToken: val == 'print_cashback' ? detail.cashbackQrToken : null,
+                        cashbackQrUrl: val == 'print_cashback'
+                            ? detail.cashbackQrUrl
+                            : null,
+                        cashbackQrToken: val == 'print_cashback'
+                            ? detail.cashbackQrToken
+                            : null,
                         items: detail.lineItems
-                            .map((item) => PrintItem(
-                                  name: item.itemName,
-                                  qty: item.quantity.round(),
-                                  unitPrice: item.unitPrice,
-                                  lineTotal: item.totalMoney,
-                                  discount: ((item.unitPrice * item.quantity) -
-                                          item.totalMoney)
-                                      .clamp(0.0, double.infinity),
-                                  modifiers: item.modifierNames,
-                                ))
+                            .map(
+                              (item) => PrintItem(
+                                name: item.itemName,
+                                qty: item.quantity.round(),
+                                unitPrice: item.unitPrice,
+                                lineTotal: item.totalMoney,
+                                discount:
+                                    ((item.unitPrice * item.quantity) -
+                                            item.totalMoney)
+                                        .clamp(0.0, double.infinity),
+                                modifiers: item.modifierNames,
+                              ),
+                            )
                             .toList(),
                         total: receipt.totalMoney,
                         subtotal: detail.subtotal,
                         discount: detail.totalDiscount,
-                        deliveryFee: detail.deliveryFee + detail.grabfoodDeliveryFee,
-                        cashReceived: payment?.moneyAmount ?? receipt.totalMoney,
+                        deliveryFee:
+                            detail.deliveryFee + detail.grabfoodDeliveryFee,
+                        cashReceived:
+                            payment?.moneyAmount ?? receipt.totalMoney,
                         change: payment?.cashBack ?? 0.0,
                       ),
                     );
@@ -1983,7 +2032,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             ? const SizedBox(
                                 width: 20,
                                 height: 20,
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
                               )
                             : const Icon(Icons.local_cafe_outlined, size: 20),
                         const SizedBox(width: 12),
@@ -2074,31 +2125,32 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                   child: Text(
                                     item.itemName,
                                     style: const TextStyle(
-                                        fontWeight: FontWeight.w500),
+                                      fontWeight: FontWeight.w500,
+                                    ),
                                   ),
                                 ),
-                                Text(
-                                    'RM${item.totalMoney.toStringAsFixed(2)}'),
+                                Text('RM${item.totalMoney.toStringAsFixed(2)}'),
                               ],
                             ),
                             Padding(
-                              padding:
-                                  const EdgeInsets.only(top: 2, bottom: 8),
+                              padding: const EdgeInsets.only(top: 2, bottom: 8),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
                                     '${item.quantity.toStringAsFixed(0)} × RM${item.unitPrice.toStringAsFixed(2)}',
                                     style: const TextStyle(
-                                        fontSize: 13,
-                                        color: Color(0xFF9E9E9E)),
+                                      fontSize: 13,
+                                      color: Color(0xFF9E9E9E),
+                                    ),
                                   ),
                                   for (final mod in item.modifierNames)
                                     Text(
                                       mod,
                                       style: const TextStyle(
-                                          fontSize: 13,
-                                          color: Color(0xFF9E9E9E)),
+                                        fontSize: 13,
+                                        color: Color(0xFF9E9E9E),
+                                      ),
                                     ),
                                 ],
                               ),
@@ -2119,12 +2171,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             Row(
                               children: [
                                 const Expanded(
-                                  child: Text('Discount',
-                                      style: TextStyle(color: Color(0xFF388E3C))),
+                                  child: Text(
+                                    'Discount',
+                                    style: TextStyle(color: Color(0xFF388E3C)),
+                                  ),
                                 ),
                                 Text(
                                   '-RM${detail.totalDiscount.toStringAsFixed(2)}',
-                                  style: const TextStyle(color: Color(0xFF388E3C)),
+                                  style: const TextStyle(
+                                    color: Color(0xFF388E3C),
+                                  ),
                                 ),
                               ],
                             ),
@@ -2134,7 +2190,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             Row(
                               children: [
                                 const Expanded(child: Text('Delivery Fee')),
-                                Text('RM${detail.grabfoodDeliveryFee.toStringAsFixed(2)}'),
+                                Text(
+                                  'RM${detail.grabfoodDeliveryFee.toStringAsFixed(2)}',
+                                ),
                               ],
                             ),
                           ],
@@ -2148,14 +2206,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         Row(
                           children: [
                             const Expanded(
-                              child: Text('Total',
-                                  style: TextStyle(
-                                      fontWeight: FontWeight.bold)),
+                              child: Text(
+                                'Total',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
                             ),
                             Text(
                               'RM${receipt.totalMoney.toStringAsFixed(2)}',
                               style: const TextStyle(
-                                  fontWeight: FontWeight.bold),
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ],
                         ),
@@ -2174,13 +2234,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               Row(
                                 children: [
                                   const Expanded(
-                                      child: Text('Change',
-                                          style: TextStyle(
-                                              color: Color(0xFF9E9E9E)))),
+                                    child: Text(
+                                      'Change',
+                                      style: TextStyle(
+                                        color: Color(0xFF9E9E9E),
+                                      ),
+                                    ),
+                                  ),
                                   Text(
                                     'RM${p.cashBack.toStringAsFixed(2)}',
                                     style: const TextStyle(
-                                        color: Color(0xFF9E9E9E)),
+                                      color: Color(0xFF9E9E9E),
+                                    ),
                                   ),
                                 ],
                               ),
@@ -2191,7 +2256,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             children: [
                               Expanded(child: Text(receipt.paymentMethod)),
                               Text(
-                                  'RM${receipt.totalMoney.toStringAsFixed(2)}'),
+                                'RM${receipt.totalMoney.toStringAsFixed(2)}',
+                              ),
                             ],
                           ),
                         const SizedBox(height: 20),
@@ -2202,7 +2268,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               children: [
                                 Container(
                                   padding: const EdgeInsets.symmetric(
-                                      horizontal: 16, vertical: 6),
+                                    horizontal: 16,
+                                    vertical: 6,
+                                  ),
                                   decoration: BoxDecoration(
                                     color: statusKey == 'cancelled'
                                         ? const Color(0xFFFFEBEE)
@@ -2227,8 +2295,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                   Text(
                                     'Reason: ${_receiptReasons[rn]}',
                                     style: const TextStyle(
-                                        fontSize: 13,
-                                        color: Color(0xFF757575)),
+                                      fontSize: 13,
+                                      color: Color(0xFF757575),
+                                    ),
                                   ),
                                 ],
                               ],
@@ -2236,60 +2305,74 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           )
                         else if (receipt.sourceLabel.isEmpty ||
                             receipt.source.toUpperCase() == 'POS')
-                          Builder(builder: (context) {
-                            final isSmall =
-                                MediaQuery.of(context).size.width < 700;
-                            final refundBtn = OutlinedButton(
-                              onPressed: detail == null
-                                  ? null
-                                  : () =>
-                                      _showReasonModal(receipt, type: 'refund'),
-                              style: OutlinedButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 16, vertical: 14),
-                                side: const BorderSide(
-                                    color: Color(0xFFE67E22)),
-                                foregroundColor: const Color(0xFFE67E22),
-                                shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(6)),
-                              ),
-                              child: const Text('Issue Refund',
-                                  style:
-                                      TextStyle(fontWeight: FontWeight.w600)),
-                            );
-                            final cancelBtn = ElevatedButton(
-                              onPressed: () =>
-                                  _showReasonModal(receipt, type: 'cancel'),
-                              style: ElevatedButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(
-                                    vertical: 14),
-                                backgroundColor: const Color(0xFFE67E22),
-                                foregroundColor: Colors.white,
-                                elevation: 0,
-                                shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(6)),
-                              ),
-                              child: const Text('Cancel Transaction',
-                                  style:
-                                      TextStyle(fontWeight: FontWeight.w600)),
-                            );
-                            if (isSmall) {
-                              return Column(
-                                crossAxisAlignment:
-                                    CrossAxisAlignment.stretch,
+                          Builder(
+                            builder: (context) {
+                              final isSmall =
+                                  MediaQuery.of(context).size.width < 700;
+                              final refundBtn = OutlinedButton(
+                                onPressed: detail == null
+                                    ? null
+                                    : () => _showReasonModal(
+                                        receipt,
+                                        type: 'refund',
+                                      ),
+                                style: OutlinedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 14,
+                                  ),
+                                  side: const BorderSide(
+                                    color: Color(0xFFE67E22),
+                                  ),
+                                  foregroundColor: const Color(0xFFE67E22),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                ),
+                                child: const Text(
+                                  'Issue Refund',
+                                  style: TextStyle(fontWeight: FontWeight.w600),
+                                ),
+                              );
+                              final cancelBtn = ElevatedButton(
+                                onPressed: () =>
+                                    _showReasonModal(receipt, type: 'cancel'),
+                                style: ElevatedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 14,
+                                  ),
+                                  backgroundColor: const Color(0xFFE67E22),
+                                  foregroundColor: Colors.white,
+                                  elevation: 0,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                ),
+                                child: const Text(
+                                  'Cancel Transaction',
+                                  style: TextStyle(fontWeight: FontWeight.w600),
+                                ),
+                              );
+                              if (isSmall) {
+                                return Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    refundBtn,
+                                    const SizedBox(height: 10),
+                                    cancelBtn,
+                                  ],
+                                );
+                              }
+                              return Row(
                                 children: [
-                                  refundBtn,
-                                  const SizedBox(height: 10),
-                                  cancelBtn,
+                                  Expanded(child: refundBtn),
+                                  const SizedBox(width: 12),
+                                  Expanded(child: cancelBtn),
                                 ],
                               );
-                            }
-                            return Row(children: [
-                              Expanded(child: refundBtn),
-                              const SizedBox(width: 12),
-                              Expanded(child: cancelBtn),
-                            ]);
-                          }),
+                            },
+                          ),
                         const Divider(height: 40),
                         Row(
                           children: [
@@ -2297,13 +2380,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               child: Text(
                                 receipt.shortDatetime,
                                 style: const TextStyle(
-                                    color: Color(0xFF9E9E9E), fontSize: 13),
+                                  color: Color(0xFF9E9E9E),
+                                  fontSize: 13,
+                                ),
                               ),
                             ),
                             Text(
                               rn,
                               style: const TextStyle(
-                                  color: Color(0xFF9E9E9E), fontSize: 13),
+                                color: Color(0xFF9E9E9E),
+                                fontSize: 13,
+                              ),
                             ),
                           ],
                         ),
@@ -2361,7 +2448,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             title,
                             textAlign: TextAlign.center,
                             style: const TextStyle(
-                                fontSize: 16, fontWeight: FontWeight.w700),
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
                         ),
                       ),
@@ -2380,8 +2469,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                     _isRefundMode = true;
                                     _refundQtys.clear();
                                     for (int i = 0; i < items.length; i++) {
-                                      _refundQtys[i] =
-                                          items[i].quantity.round();
+                                      _refundQtys[i] = items[i].quantity
+                                          .round();
                                     }
                                   });
                                 }
@@ -2394,15 +2483,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           elevation: 0,
                           shape: const RoundedRectangleBorder(
                             borderRadius: BorderRadius.only(
-                                topRight: Radius.circular(28)),
+                              topRight: Radius.circular(28),
+                            ),
                           ),
-                          padding:
-                              const EdgeInsets.symmetric(horizontal: 28),
+                          padding: const EdgeInsets.symmetric(horizontal: 28),
                         ),
-                        child: const Text('CONFIRM',
-                            style: TextStyle(
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 1)),
+                        child: const Text(
+                          'CONFIRM',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 1,
+                          ),
+                        ),
                       ),
                     ],
                   ),
@@ -2421,8 +2513,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       children: reasons.map((reason) {
                         final selected = selectedReason == reason;
                         return GestureDetector(
-                          onTap: () =>
-                              setModal(() => selectedReason = reason),
+                          onTap: () => setModal(() => selectedReason = reason),
                           child: Container(
                             decoration: BoxDecoration(
                               color: selected
@@ -2494,9 +2585,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
               Text(
                 'Refund $rn',
                 style: const TextStyle(
-                    color: Color(0xFF212121),
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600),
+                  color: Color(0xFF212121),
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ],
           ),
@@ -2518,9 +2610,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           borderRadius: BorderRadius.circular(8),
                           boxShadow: const [
                             BoxShadow(
-                                color: Color(0x14000000),
-                                blurRadius: 12,
-                                offset: Offset(0, 4))
+                              color: Color(0x14000000),
+                              blurRadius: 12,
+                              offset: Offset(0, 4),
+                            ),
                           ],
                         ),
                         child: Column(
@@ -2528,16 +2621,21 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           children: [
                             const Padding(
                               padding: EdgeInsets.fromLTRB(20, 20, 20, 4),
-                              child: Text('Select items to refund',
-                                  style: TextStyle(
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 15)),
+                              child: Text(
+                                'Select items to refund',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 15,
+                                ),
+                              ),
                             ),
                             const Divider(height: 1),
                             for (int i = 0; i < items.length; i++) ...[
                               Padding(
                                 padding: const EdgeInsets.symmetric(
-                                    horizontal: 16, vertical: 12),
+                                  horizontal: 16,
+                                  vertical: 12,
+                                ),
                                 child: Row(
                                   children: [
                                     Expanded(
@@ -2545,56 +2643,71 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                         crossAxisAlignment:
                                             CrossAxisAlignment.start,
                                         children: [
-                                          Text(items[i].itemName,
-                                              style: const TextStyle(
-                                                  fontSize: 14)),
+                                          Text(
+                                            items[i].itemName,
+                                            style: const TextStyle(
+                                              fontSize: 14,
+                                            ),
+                                          ),
                                           const SizedBox(height: 2),
                                           Text(
                                             '${items[i].quantity.toStringAsFixed(0)} × RM${items[i].unitPrice.toStringAsFixed(2)}',
                                             style: const TextStyle(
-                                                color: Color(0xFF9E9E9E),
-                                                fontSize: 13),
+                                              color: Color(0xFF9E9E9E),
+                                              fontSize: 13,
+                                            ),
                                           ),
                                         ],
                                       ),
                                     ),
-                                    Row(children: [
-                                      IconButton(
-                                        icon: const Icon(Icons.remove,
-                                            size: 16),
-                                        padding: EdgeInsets.zero,
-                                        constraints: const BoxConstraints(
-                                            minWidth: 32, minHeight: 32),
-                                        onPressed: (_refundQtys[i] ?? 0) > 0
-                                            ? () => setState(() =>
-                                                _refundQtys[i] =
-                                                    _refundQtys[i]! - 1)
-                                            : null,
-                                      ),
-                                      SizedBox(
-                                        width: 28,
-                                        child: Text(
-                                          '${_refundQtys[i] ?? 0}',
-                                          textAlign: TextAlign.center,
-                                          style: const TextStyle(
-                                              fontWeight: FontWeight.w600,
-                                              fontSize: 15),
+                                    Row(
+                                      children: [
+                                        IconButton(
+                                          icon: const Icon(
+                                            Icons.remove,
+                                            size: 16,
+                                          ),
+                                          padding: EdgeInsets.zero,
+                                          constraints: const BoxConstraints(
+                                            minWidth: 32,
+                                            minHeight: 32,
+                                          ),
+                                          onPressed: (_refundQtys[i] ?? 0) > 0
+                                              ? () => setState(
+                                                  () => _refundQtys[i] =
+                                                      _refundQtys[i]! - 1,
+                                                )
+                                              : null,
                                         ),
-                                      ),
-                                      IconButton(
-                                        icon: const Icon(Icons.add, size: 16),
-                                        padding: EdgeInsets.zero,
-                                        constraints: const BoxConstraints(
-                                            minWidth: 32, minHeight: 32),
-                                        onPressed:
-                                            (_refundQtys[i] ?? 0) <
-                                                    items[i].quantity.round()
-                                                ? () => setState(() =>
-                                                    _refundQtys[i] =
-                                                        _refundQtys[i]! + 1)
-                                                : null,
-                                      ),
-                                    ]),
+                                        SizedBox(
+                                          width: 28,
+                                          child: Text(
+                                            '${_refundQtys[i] ?? 0}',
+                                            textAlign: TextAlign.center,
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.w600,
+                                              fontSize: 15,
+                                            ),
+                                          ),
+                                        ),
+                                        IconButton(
+                                          icon: const Icon(Icons.add, size: 16),
+                                          padding: EdgeInsets.zero,
+                                          constraints: const BoxConstraints(
+                                            minWidth: 32,
+                                            minHeight: 32,
+                                          ),
+                                          onPressed:
+                                              (_refundQtys[i] ?? 0) <
+                                                  items[i].quantity.round()
+                                              ? () => setState(
+                                                  () => _refundQtys[i] =
+                                                      _refundQtys[i]! + 1,
+                                                )
+                                              : null,
+                                        ),
+                                      ],
+                                    ),
                                     const SizedBox(width: 8),
                                     SizedBox(
                                       width: 72,
@@ -2602,7 +2715,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                         'RM${((_refundQtys[i] ?? 0) * items[i].totalMoney / items[i].quantity).toStringAsFixed(2)}',
                                         textAlign: TextAlign.end,
                                         style: const TextStyle(
-                                            fontWeight: FontWeight.w500),
+                                          fontWeight: FontWeight.w500,
+                                        ),
                                       ),
                                     ),
                                   ],
@@ -2622,22 +2736,32 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           borderRadius: BorderRadius.circular(8),
                           boxShadow: const [
                             BoxShadow(
-                                color: Color(0x14000000),
-                                blurRadius: 12,
-                                offset: Offset(0, 4))
+                              color: Color(0x14000000),
+                              blurRadius: 12,
+                              offset: Offset(0, 4),
+                            ),
                           ],
                         ),
-                        child: Row(children: [
-                          const Text('Refund total',
+                        child: Row(
+                          children: [
+                            const Text(
+                              'Refund total',
                               style: TextStyle(
-                                  fontWeight: FontWeight.w600, fontSize: 16)),
-                          const Spacer(),
-                          Text('RM${refundTotal.toStringAsFixed(2)}',
+                                fontWeight: FontWeight.w600,
+                                fontSize: 16,
+                              ),
+                            ),
+                            const Spacer(),
+                            Text(
+                              'RM${refundTotal.toStringAsFixed(2)}',
                               style: const TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 20,
-                                  color: Color(0xFFE67E22))),
-                        ]),
+                                fontWeight: FontWeight.w700,
+                                fontSize: 20,
+                                color: Color(0xFFE67E22),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                       const SizedBox(height: 20),
                       SizedBox(
@@ -2649,15 +2773,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                 : const Color(0xFFE67E22),
                             foregroundColor: Colors.white,
                             shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8)),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
                           ),
                           onPressed: refundTotal == 0 || _isProcessingRefund
                               ? null
                               : _processRefund,
-                          child: const Text('PROCESS REFUND',
-                              style: TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  letterSpacing: 0.5)),
+                          child: const Text(
+                            'PROCESS REFUND',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
                         ),
                       ),
                     ],
@@ -2689,7 +2817,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     final Widget mainContent;
     if (_selectedIndex == 0) {
-      final preloaded = (_preloadedItems != null &&
+      final preloaded =
+          (_preloadedItems != null &&
               _preloadedGroups != null &&
               _preloadedModifiers != null &&
               _preloadedPaymentModes != null)
@@ -2931,6 +3060,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
         : 'Unable to reach CRM API'
               '${status.errorMessage == null ? '.' : ': ${status.errorMessage}'}';
 
+    final proxySummary = _lastProxySummary;
+
     return Container(
       width: 560,
       padding: const EdgeInsets.all(32),
@@ -2975,6 +3106,57 @@ class _RegisterScreenState extends State<RegisterScreen> {
               ),
             ],
           ),
+          if (!_isSyncLoading && !isReachable && proxySummary != null) ...[
+            const SizedBox(height: 18),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFF8E1),
+                border: Border.all(color: const Color(0xFFFFE082)),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        Icons.wifi_tethering_error_outlined,
+                        size: 16,
+                        color: Color(0xFFE65100),
+                      ),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'If your Wi-Fi / hotspot forces a transparent proxy '
+                          '(typical when hotspot quota is exhausted but carrier '
+                          'data is still unlimited), set the HTTP proxy in '
+                          'Settings → General → HTTP Proxy.',
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            color: Color(0xFF4E342E),
+                            height: 1.35,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    proxySummary,
+                    style: const TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 11.5,
+                      color: Color(0xFF4E342E),
+                      height: 1.45,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 24),
           Wrap(
             spacing: 12,
@@ -3096,4 +3278,3 @@ class _CurrencyTextInputFormatter extends TextInputFormatter {
     );
   }
 }
-

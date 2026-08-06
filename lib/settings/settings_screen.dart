@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../api/api_client.dart';
+import '../api/app_config.dart';
 import '../services/bt_printer_service.dart';
 import '../services/http_proxy_overrides.dart';
 import '../services/printer_config_service.dart';
@@ -153,6 +156,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final TextEditingController _proxyHttpsCtrl = TextEditingController();
   final TextEditingController _proxyNoProxyCtrl = TextEditingController();
   bool _proxySaving = false;
+  bool _trustBadCerts = false;
+  bool _verboseProxyLog = false;
+  bool _testingConn = false;
+  String? _lastConnResult;
 
   @override
   void dispose() {
@@ -177,6 +184,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _proxyHttpCtrl.text = cfg.http ?? '';
       _proxyHttpsCtrl.text = cfg.https ?? '';
       _proxyNoProxyCtrl.text = cfg.noProxy.join(',');
+      _trustBadCerts = cfg.trustBadCerts;
+      _verboseProxyLog = cfg.verboseLog;
     });
   }
 
@@ -1131,9 +1140,72 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   controller: _proxyNoProxyCtrl,
                   hint: 'localhost,127.0.0.1,.mycompany.lan',
                 ),
+                const SizedBox(height: 10),
+                SwitchListTile(
+                  dense: true,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 0),
+                  value: _trustBadCerts,
+                  onChanged: (v) => setState(() => _trustBadCerts = v),
+                  title: const Text('Trust bad certificates'),
+                  subtitle: const Text(
+                    'Use for hotspot / captive portals that intercept HTTPS with a '
+                    'self-signed cert when hotspot quota is exhausted.',
+                    style: TextStyle(fontSize: 12, color: Color(0xFF757575)),
+                  ),
+                ),
+                SwitchListTile(
+                  dense: true,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 0),
+                  value: _verboseProxyLog,
+                  onChanged: (v) => setState(() => _verboseProxyLog = v),
+                  title: const Text('Verbose proxy log'),
+                  subtitle: const Text(
+                    'Prints PROXY / DIRECT decision per request to the debug console.',
+                    style: TextStyle(fontSize: 12, color: Color(0xFF757575)),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                if (_lastConnResult != null)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF3F4F8),
+                      border: Border.all(color: const Color(0xFFE0E0E0)),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      _lastConnResult!,
+                      style: const TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: 12,
+                        color: Color(0xFF424242),
+                        height: 1.35,
+                      ),
+                    ),
+                  ),
                 const SizedBox(height: 8),
                 Row(
                   children: [
+                    OutlinedButton(
+                      onPressed: _testingConn ? null : _testConnection,
+                      child: _testingConn
+                          ? const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                SizedBox(
+                                  width: 12,
+                                  height: 12,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                ),
+                                SizedBox(width: 8),
+                                Text('Testing…'),
+                              ],
+                            )
+                          : const Text('Test Connection'),
+                    ),
                     const Spacer(),
                     TextButton(
                       onPressed: _proxySaving
@@ -1142,6 +1214,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               _proxyHttpCtrl.clear();
                               _proxyHttpsCtrl.clear();
                               _proxyNoProxyCtrl.clear();
+                              setState(() {
+                                _trustBadCerts = false;
+                                _verboseProxyLog = false;
+                              });
                               _saveProxyConfig(clearAll: true);
                             },
                       child: const Text('Clear'),
@@ -1171,6 +1247,51 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  Future<void> _testConnection() async {
+    setState(() {
+      _testingConn = true;
+      _lastConnResult = null;
+    });
+    final stopwatch = Stopwatch()..start();
+    final summary = await ProxyAwareHttpOverrides.summary();
+    final client = ApiClient();
+    try {
+      final status = await client.ping();
+      stopwatch.stop();
+      if (!mounted) return;
+      final codeLabel = status.statusCode != null
+          ? 'HTTP ${status.statusCode}'
+          : (status.isReachable ? 'OK' : 'unreachable');
+      final msg = StringBuffer(
+        'Target: ${AppConfig.baseUrl}\n'
+        'Result: ${status.isReachable ? '✅ Reachable' : '❌ Failed'} ($codeLabel) in ${stopwatch.elapsedMilliseconds} ms\n'
+        '\n── Active proxy config ──\n$summary\n'
+        '${status.errorMessage != null && !status.isReachable ? '\n── Error ──\n${status.errorMessage}' : ''}',
+      );
+      setState(() {
+        _lastConnResult = msg.toString();
+      });
+    } on http.ClientException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _lastConnResult =
+            'Target: ${AppConfig.baseUrl}\n'
+            'Result: ❌ ClientException in ${stopwatch.elapsedMilliseconds} ms\n\n'
+            '── Active proxy config ──\n$summary\n\n── Error ──\n$e';
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _lastConnResult =
+            'Target: ${AppConfig.baseUrl}\n'
+            'Result: ❌ Exception in ${stopwatch.elapsedMilliseconds} ms\n\n'
+            '── Active proxy config ──\n$summary\n\n── Error ──\n$e';
+      });
+    } finally {
+      if (mounted) setState(() => _testingConn = false);
+    }
+  }
+
   Future<void> _saveProxyConfig({bool clearAll = false}) async {
     setState(() => _proxySaving = true);
     try {
@@ -1178,6 +1299,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         httpProxy: clearAll ? null : _proxyHttpCtrl.text,
         httpsProxy: clearAll ? null : _proxyHttpsCtrl.text,
         noProxyCsv: clearAll ? null : _proxyNoProxyCtrl.text,
+        trustBadCerts: clearAll ? false : _trustBadCerts,
+        verboseLog: clearAll ? false : _verboseProxyLog,
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
