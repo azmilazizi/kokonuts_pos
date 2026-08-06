@@ -14,6 +14,7 @@ import 'models/pos_modifier_group.dart';
 import 'register/pos_register.dart';
 import 'register/syncing_screen.dart';
 import 'services/delivery_print_job_poller.dart';
+import 'services/http_proxy_overrides.dart';
 import 'services/items_service.dart';
 import 'services/payment_mode_service.dart';
 import 'services/print_job_service.dart';
@@ -27,7 +28,9 @@ import 'services/receipt_service.dart';
 
 import 'storage/secure_store.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await ProxyAwareHttpOverrides.apply();
   runApp(const PosApp());
 }
 

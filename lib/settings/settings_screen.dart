@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/bt_printer_service.dart';
+import '../services/http_proxy_overrides.dart';
 import '../services/printer_config_service.dart';
 import '../services/sunmi_display_service.dart';
 
@@ -148,11 +149,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // ── General ───────────────────────────────────────────────────────────────
   bool _darkModeEnabled = false;
 
+  final TextEditingController _proxyHttpCtrl = TextEditingController();
+  final TextEditingController _proxyHttpsCtrl = TextEditingController();
+  final TextEditingController _proxyNoProxyCtrl = TextEditingController();
+  bool _proxySaving = false;
+
+  @override
+  void dispose() {
+    _proxyHttpCtrl.dispose();
+    _proxyHttpsCtrl.dispose();
+    _proxyNoProxyCtrl.dispose();
+    super.dispose();
+  }
+
   @override
   void initState() {
     super.initState();
     _loadSavedConfigs();
     _initDisplayState();
+    _loadProxyConfig();
+  }
+
+  Future<void> _loadProxyConfig() async {
+    final cfg = await ProxyAwareHttpOverrides.readSavedConfig();
+    if (!mounted) return;
+    setState(() {
+      _proxyHttpCtrl.text = cfg.http ?? '';
+      _proxyHttpsCtrl.text = cfg.https ?? '';
+      _proxyNoProxyCtrl.text = cfg.noProxy.join(',');
+    });
   }
 
   Future<void> _initDisplayState() async {
@@ -281,7 +306,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
           paperWidth: widths[kitchenMac] ?? PaperWidth.w58mm,
         );
       }
-
     });
   }
 
@@ -329,7 +353,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await _Discovery.resetUsbPermissions();
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('USB permissions reset. Replug devices and scan again.')),
+      const SnackBar(
+        content: Text('USB permissions reset. Replug devices and scan again.'),
+      ),
     );
     setState(() {
       _usbDevices = [];
@@ -350,7 +376,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         showPaperWidth: true,
         onTestPrint: device.type == _DeviceType.bluetooth
-            ? (width) => BtPrinterService().printTest(device.key, paperWidth: width)
+            ? (width) =>
+                  BtPrinterService().printTest(device.key, paperWidth: width)
             : null,
         onSave: (updated) async {
           setState(() => _printerConfigs[device.key] = updated);
@@ -536,25 +563,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 icon: Icons.monitor,
                 label: 'Customer displays',
                 isSelected: _selectedTab == _SettingTab.customerDisplays,
-                onTap: () => setState(
-                  () => _selectedTab = _SettingTab.customerDisplays,
-                ),
+                onTap: () =>
+                    setState(() => _selectedTab = _SettingTab.customerDisplays),
               ),
               const Divider(height: 1),
               _SettingsNavItem(
                 icon: Icons.percent,
                 label: 'Taxes',
                 isSelected: _selectedTab == _SettingTab.taxes,
-                onTap: () =>
-                    setState(() => _selectedTab = _SettingTab.taxes),
+                onTap: () => setState(() => _selectedTab = _SettingTab.taxes),
               ),
               const Divider(height: 1),
               _SettingsNavItem(
                 icon: Icons.settings,
                 label: 'General',
                 isSelected: _selectedTab == _SettingTab.general,
-                onTap: () =>
-                    setState(() => _selectedTab = _SettingTab.general),
+                onTap: () => setState(() => _selectedTab = _SettingTab.general),
               ),
               const Divider(height: 1),
             ],
@@ -645,7 +669,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ),
               TextButton.icon(
-                style: TextButton.styleFrom(foregroundColor: const Color(0xFF757575)),
+                style: TextButton.styleFrom(
+                  foregroundColor: const Color(0xFF757575),
+                ),
                 onPressed: _isScanningUsb ? null : _resetUsbPermissions,
                 icon: const Icon(Icons.lock_reset, size: 16),
                 label: const Text('Reset'),
@@ -721,8 +747,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             borderRadius: BorderRadius.circular(8),
             onTap: isAssigned ? () => openConfig(assignedKey) : null,
             child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: const Color(0xFFE0E0E0)),
@@ -732,9 +757,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   Icon(
                     roleIcon,
                     size: 20,
-                    color: isAssigned
-                        ? _kGreen
-                        : const Color(0xFFBDBDBD),
+                    color: isAssigned ? _kGreen : const Color(0xFFBDBDBD),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -932,10 +955,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           Expanded(
             child: Text(
               message,
-              style: const TextStyle(
-                color: Color(0xFF9E9E9E),
-                fontSize: 13,
-              ),
+              style: const TextStyle(color: Color(0xFF9E9E9E), fontSize: 13),
             ),
           ),
         ],
@@ -991,14 +1011,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           child: CircularProgressIndicator(strokeWidth: 1.5),
                         ),
                         const SizedBox(width: 8),
-                        Text(subtitle,
-                            style: TextStyle(
-                                color: subtitleColor, fontSize: 13)),
+                        Text(
+                          subtitle,
+                          style: TextStyle(color: subtitleColor, fontSize: 13),
+                        ),
                       ],
                     )
-                  : Text(subtitle,
-                      style:
-                          TextStyle(color: subtitleColor, fontSize: 13)),
+                  : Text(
+                      subtitle,
+                      style: TextStyle(color: subtitleColor, fontSize: 13),
+                    ),
               activeThumbColor: _kGreen,
               activeTrackColor: const Color(0xFFFFCC80),
             ),
@@ -1009,14 +1031,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 4),
               child: Row(
                 children: [
-                  const Icon(Icons.info_outline,
-                      size: 14, color: Color(0xFFBDBDBD)),
+                  const Icon(
+                    Icons.info_outline,
+                    size: 14,
+                    color: Color(0xFFBDBDBD),
+                  ),
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
                       'Connect a secondary display to this device to enable the customer-facing screen.',
                       style: const TextStyle(
-                          fontSize: 12, color: Color(0xFF9E9E9E)),
+                        fontSize: 12,
+                        color: Color(0xFF9E9E9E),
+                      ),
                     ),
                   ),
                 ],
@@ -1060,9 +1087,116 @@ class _SettingsScreenState extends State<SettingsScreen> {
               activeTrackColor: const Color(0xFFFFCC80),
             ),
           ),
+          const SizedBox(height: 24),
+          const Text(
+            'HTTP PROXY (HOTSPOT / CORPORATE NETWORK)',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.8,
+              color: Color(0xFF757575),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: const Color(0xFFE0E0E0)),
+            ),
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Set proxy only if your Wi-Fi / hotspot requires it. '
+                  'Values are applied globally to every API call immediately after saving.',
+                  style: TextStyle(color: Color(0xFF757575), fontSize: 13),
+                ),
+                const SizedBox(height: 16),
+                _ProxyField(
+                  label: 'HTTP Proxy URL',
+                  controller: _proxyHttpCtrl,
+                  hint: 'http://proxy.example.com:8080',
+                ),
+                const SizedBox(height: 12),
+                _ProxyField(
+                  label: 'HTTPS Proxy URL',
+                  controller: _proxyHttpsCtrl,
+                  hint: 'http://proxy.example.com:8080 (usually same as HTTP)',
+                ),
+                const SizedBox(height: 12),
+                _ProxyField(
+                  label: 'Bypass hosts',
+                  controller: _proxyNoProxyCtrl,
+                  hint: 'localhost,127.0.0.1,.mycompany.lan',
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    const Spacer(),
+                    TextButton(
+                      onPressed: _proxySaving
+                          ? null
+                          : () {
+                              _proxyHttpCtrl.clear();
+                              _proxyHttpsCtrl.clear();
+                              _proxyNoProxyCtrl.clear();
+                              _saveProxyConfig(clearAll: true);
+                            },
+                      child: const Text('Clear'),
+                    ),
+                    const SizedBox(width: 8),
+                    FilledButton(
+                      onPressed: _proxySaving ? null : () => _saveProxyConfig(),
+                      style: FilledButton.styleFrom(backgroundColor: _kGreen),
+                      child: _proxySaving
+                          ? const SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Text('Save Proxy'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
+  }
+
+  Future<void> _saveProxyConfig({bool clearAll = false}) async {
+    setState(() => _proxySaving = true);
+    try {
+      await ProxyAwareHttpOverrides.saveConfig(
+        httpProxy: clearAll ? null : _proxyHttpCtrl.text,
+        httpsProxy: clearAll ? null : _proxyHttpsCtrl.text,
+        noProxyCsv: clearAll ? null : _proxyNoProxyCtrl.text,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            clearAll ? 'Proxy settings cleared.' : 'Proxy settings applied.',
+          ),
+        ),
+      );
+      if (clearAll) {
+        setState(() {
+          _proxyHttpCtrl.clear();
+          _proxyHttpsCtrl.clear();
+          _proxyNoProxyCtrl.clear();
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _proxySaving = false);
+    }
   }
 }
 
@@ -1145,13 +1279,15 @@ class _PrinterConfigModalState extends State<_PrinterConfigModal> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Paper Width',
-                            style: TextStyle(fontSize: 15)),
+                        Text('Paper Width', style: TextStyle(fontSize: 15)),
                         SizedBox(height: 2),
-                        Text('Match your paper roll size.',
-                            style: TextStyle(
-                                fontSize: 13,
-                                color: Color(0xFF9E9E9E))),
+                        Text(
+                          'Match your paper roll size.',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Color(0xFF9E9E9E),
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -1242,10 +1378,7 @@ class _PaperWidthToggle extends StatelessWidget {
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
-        children: [
-          _btn(PaperWidth.w58mm),
-          _btn(PaperWidth.w80mm),
-        ],
+        children: [_btn(PaperWidth.w58mm), _btn(PaperWidth.w80mm)],
       ),
     );
   }
@@ -1309,8 +1442,7 @@ class _SettingsNavItem extends StatelessWidget {
                   style: TextStyle(
                     color: color,
                     fontSize: 15,
-                    fontWeight:
-                        isSelected ? FontWeight.w600 : FontWeight.w400,
+                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
                   ),
                 ),
               ],
@@ -1318,6 +1450,61 @@ class _SettingsNavItem extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _ProxyField extends StatelessWidget {
+  const _ProxyField({required this.label, required this.controller, this.hint});
+
+  final String label;
+  final TextEditingController controller;
+  final String? hint;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF616161),
+          ),
+        ),
+        const SizedBox(height: 6),
+        TextField(
+          controller: controller,
+          style: const TextStyle(fontSize: 14),
+          decoration: InputDecoration(
+            isDense: true,
+            hintText: hint,
+            hintStyle: const TextStyle(
+              fontSize: 13,
+              color: Color(0xFFBDBDBD),
+              fontStyle: FontStyle.italic,
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 12,
+            ),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: Color(0xFFE0E0E0)),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: Color(0xFFE0E0E0)),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: Color(0xFFE67E22)),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
