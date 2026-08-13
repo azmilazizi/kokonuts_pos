@@ -133,6 +133,8 @@ class OrderQueue {
         'name': item.name,
         'qty': item.qty,
         'unit_price': item.unitPrice,
+        'unit_cost': item.unitCost,
+        'cost': item.cost,
         'line_discount': item.lineDiscount,
         'modifiers': item.modifiers
             .map((m) => {
@@ -152,6 +154,8 @@ class OrderQueue {
         name: j['name'] as String,
         qty: j['qty'] as int,
         unitPrice: (j['unit_price'] as num).toDouble(),
+        unitCost: (j['unit_cost'] as num?)?.toDouble() ?? 0.0,
+        cost: (j['cost'] as num?)?.toDouble() ?? 0.0,
         lineDiscount: (j['line_discount'] as num).toDouble(),
         modifiers: modsRaw
             .map((m) => OrderItemModifier(

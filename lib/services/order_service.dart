@@ -34,6 +34,8 @@ class OrderItem {
     required this.name,
     required this.qty,
     required this.unitPrice,
+    this.unitCost = 0.0,
+    this.cost = 0.0,
     required this.lineDiscount,
     required this.modifiers,
   });
@@ -42,6 +44,8 @@ class OrderItem {
   final String name;
   final int qty;
   final double unitPrice;
+  final double unitCost;
+  final double cost;
   final double lineDiscount;
   final List<OrderItemModifier> modifiers;
 }
@@ -109,6 +113,8 @@ class OrderService {
                 'variant_name': null,
                 'qty': item.qty,
                 'unit_price': item.unitPrice,
+                'cost': item.cost,
+                'unit_cost': item.unitCost,
                 'line_discount': item.lineDiscount,
                 'total_tax': 0.0,
                 'tax_ids': <int>[],

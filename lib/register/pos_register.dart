@@ -87,12 +87,14 @@ class _Product {
     required this.name,
     required this.category,
     required this.price,
+    this.cost = 0.0,
     this.modifierGroups = const [],
   });
   final String id;
   final String name;
   final String category;
   final double price;
+  final double cost;
   final List<_ModifierGroup> modifierGroups;
   bool get hasModifiers => modifierGroups.isNotEmpty;
 }
@@ -367,6 +369,7 @@ class _PosRegisterState extends State<PosRegister>
         name: item.name,
         category: item.groupId,
         price: item.price,
+        cost: item.cost,
         modifierGroups: mGroups,
       );
     }).toList();
@@ -691,6 +694,8 @@ class _PosRegisterState extends State<PosRegister>
           name: item.product.name,
           qty: item.quantity,
           unitPrice: item.product.price,
+          unitCost: item.product.cost,
+          cost: (item.product.cost * item.quantity).toDouble(),
           lineDiscount: item.itemDiscount,
           modifiers: modifiers,
         );

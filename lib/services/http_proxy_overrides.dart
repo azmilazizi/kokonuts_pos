@@ -19,9 +19,12 @@ import 'package:flutter/services.dart';
 class ProxyAwareHttpOverrides extends HttpOverrides {
   ProxyAwareHttpOverrides._(this._config);
 
-  final _SystemProxyConfig _config;
+  _SystemProxyConfig _config;
 
   static const _channel = MethodChannel('kokonuts_pos/system_network');
+  static const _eventChannel = EventChannel(
+    'kokonuts_pos/system_network/proxy_updates',
+  );
   static bool _channelRead = false;
   static _SystemProxyConfig? _lastFetched;
 
@@ -32,6 +35,12 @@ class ProxyAwareHttpOverrides extends HttpOverrides {
     final cfg = await _SystemProxyConfig.resolve();
     final overrides = ProxyAwareHttpOverrides._(cfg);
     HttpOverrides.global = overrides;
+    _logConfig(cfg);
+    overrides._listenForSystemChanges();
+    return overrides;
+  }
+
+  static void _logConfig(_SystemProxyConfig cfg) {
     if (cfg.httpHost != null || cfg.httpsHost != null) {
       debugPrint(
         '[PROXY] HTTP=${cfg.httpHost ?? '?'}:${cfg.httpPort ?? '?'}  '
@@ -41,7 +50,25 @@ class ProxyAwareHttpOverrides extends HttpOverrides {
     } else {
       debugPrint('[PROXY] No system proxy configured — using DIRECT.');
     }
-    return overrides;
+  }
+
+  /// Android's Wi-Fi/system proxy can change after startup (network
+  /// reconnects, proxy toggled, hotspot cycles — as with TetherFi's Wi-Fi
+  /// Direct group). The native side pushes updates over this stream so the
+  /// app self-heals instead of being locked onto whatever was read at
+  /// startup for its entire lifetime.
+  void _listenForSystemChanges() {
+    if (kIsWeb || !Platform.isAndroid) return;
+    _eventChannel.receiveBroadcastStream().listen(
+      (event) {
+        if (event is! Map) return;
+        _config = _SystemProxyConfig._fromChannelMap(
+          Map<String, Object?>.from(event),
+        );
+        _logConfig(_config);
+      },
+      onError: (Object e) => debugPrint('[PROXY] update stream error: $e'),
+    );
   }
 
   @override
@@ -104,6 +131,34 @@ class _SystemProxyConfig {
   final int? httpsPort;
   final List<String> exclusionList;
 
+  static _SystemProxyConfig _fromChannelMap(Map<String, Object?> data) {
+    final httpHost = data['httpHost'] as String?;
+    final hp = data['httpPort'];
+    final httpPort = hp is int
+        ? hp
+        : (hp is num)
+        ? hp.toInt()
+        : null;
+    final httpsHost = data['httpsHost'] as String?;
+    final sp = data['httpsPort'];
+    final httpsPort = sp is int
+        ? sp
+        : (sp is num)
+        ? sp.toInt()
+        : null;
+    final ex = data['exclusionList'];
+    final exclusionList = ex is List
+        ? ex.whereType<String>().toList(growable: false)
+        : const <String>[];
+    return _SystemProxyConfig(
+      httpHost: httpHost,
+      httpPort: httpPort,
+      httpsHost: httpsHost,
+      httpsPort: httpsPort,
+      exclusionList: exclusionList,
+    );
+  }
+
   static Future<_SystemProxyConfig> resolve() async {
     // Cache to avoid repeated platform calls per app session
     if (ProxyAwareHttpOverrides._channelRead &&
@@ -122,31 +177,7 @@ class _SystemProxyConfig {
         final data = await ProxyAwareHttpOverrides._channel
             .invokeMapMethod<String, Object>('getSystemProxy');
         if (data != null) {
-          httpHost = data['httpHost'] as String?;
-          final hp = data['httpPort'];
-          httpPort = hp is int
-              ? hp
-              : (hp is num)
-              ? hp.toInt()
-              : null;
-          httpsHost = data['httpsHost'] as String?;
-          final sp = data['httpsPort'];
-          httpsPort = sp is int
-              ? sp
-              : (sp is num)
-              ? sp.toInt()
-              : null;
-          final ex = data['exclusionList'];
-          if (ex is List) {
-            exclusionList = ex.whereType<String>().toList(growable: false);
-          }
-          ProxyAwareHttpOverrides._lastFetched = _SystemProxyConfig(
-            httpHost: httpHost,
-            httpPort: httpPort,
-            httpsHost: httpsHost,
-            httpsPort: httpsPort,
-            exclusionList: exclusionList,
-          );
+          ProxyAwareHttpOverrides._lastFetched = _fromChannelMap(data);
           ProxyAwareHttpOverrides._channelRead = true;
           return ProxyAwareHttpOverrides._lastFetched!;
         }

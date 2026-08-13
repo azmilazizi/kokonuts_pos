@@ -1,6 +1,10 @@
 package com.example.kokonuts_pos
 
 import android.Manifest
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.net.Proxy
 import android.net.ProxyInfo
@@ -9,15 +13,20 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
 
     private lateinit var printerDiscovery: PrinterDiscoveryPlugin
 
+    private var proxyEventSink: EventChannel.EventSink? = null
+    private var proxyReceiver: BroadcastReceiver? = null
+
     companion object {
         private const val REQUEST_BT_PERMISSIONS = 1001
         private const val CHANNEL_SYSTEM_NET = "kokonuts_pos/system_network"
+        private const val CHANNEL_SYSTEM_NET_EVENTS = "kokonuts_pos/system_network/proxy_updates"
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -33,6 +42,55 @@ class MainActivity : FlutterActivity() {
                 "getSystemProxy" -> result.success(readSystemProxy())
                 else -> result.notImplemented()
             }
+        }
+
+        // Android reports the Wi-Fi/system proxy asynchronously via a broadcast
+        // (visible in logcat as "sending Proxy Broadcast for ...") whenever the
+        // network reconnects or the proxy setting changes — e.g. while TetherFi's
+        // Wi-Fi Direct hotspot cycles. A one-shot read at app startup can race
+        // that and lock onto a stale "no proxy" result for the app's lifetime,
+        // so we push live updates to Dart instead of relying on a single read.
+        EventChannel(messenger, CHANNEL_SYSTEM_NET_EVENTS).setStreamHandler(
+            object : EventChannel.StreamHandler {
+                override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
+                    proxyEventSink = events
+                    registerProxyReceiver()
+                }
+
+                override fun onCancel(arguments: Any?) {
+                    proxyEventSink = null
+                    unregisterProxyReceiver()
+                }
+            },
+        )
+    }
+
+    private fun registerProxyReceiver() {
+        if (proxyReceiver != null) return
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(ctx: Context?, intent: Intent?) {
+                proxyEventSink?.success(readSystemProxy())
+            }
+        }
+        proxyReceiver = receiver
+        // PROXY_CHANGE_ACTION is a protected system broadcast (only the OS can
+        // send it) delivered as a sticky broadcast. Sticky delivery doesn't
+        // carry the auto-generated NOT_EXPORTED permission grant, so the
+        // system's own broadcast gets rejected with a PermissionDenial if we
+        // register NOT_EXPORTED here. EXPORTED is safe since no other app can
+        // spoof a protected broadcast action.
+        ContextCompat.registerReceiver(
+            this,
+            receiver,
+            IntentFilter(Proxy.PROXY_CHANGE_ACTION),
+            ContextCompat.RECEIVER_EXPORTED,
+        )
+    }
+
+    private fun unregisterProxyReceiver() {
+        proxyReceiver?.let {
+            runCatching { unregisterReceiver(it) }
+            proxyReceiver = null
         }
     }
 
@@ -62,6 +120,7 @@ class MainActivity : FlutterActivity() {
     override fun onDestroy() {
         super.onDestroy()
         if (::printerDiscovery.isInitialized) printerDiscovery.dispose()
+        unregisterProxyReceiver()
     }
 
     private fun readSystemProxy(): Map<String, Any?> {
@@ -69,10 +128,32 @@ class MainActivity : FlutterActivity() {
         val fallbackPort = Proxy.getPort(context).takeIf { it > 0 }
 
         val info: ProxyInfo? = runCatching {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                val cm = context.getSystemService(android.net.ConnectivityManager::class.java)
-                cm?.defaultProxy
-            } else null
+            val cm = context.getSystemService(android.net.ConnectivityManager::class.java)
+                ?: return@runCatching null
+
+            val defaultProxy = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                cm.defaultProxy
+            } else {
+                null
+            }
+            if (!defaultProxy?.host.isNullOrEmpty()) return@runCatching defaultProxy
+
+            // getDefaultProxy() only returns a network's proxy if that network
+            // is the OS's "default network". A hotspot like TetherFi's Wi-Fi
+            // Direct group can only reach the internet THROUGH its own proxy,
+            // so Android's connectivity validator can never confirm it has
+            // working internet (everValidated stays false) — which can keep it
+            // from being selected as default even while connected, so the
+            // manually-configured proxy never surfaces via getDefaultProxy().
+            // Fall back to scanning every connected network directly for a
+            // Wi-Fi transport carrying a proxy, bypassing "default" entirely.
+            cm.allNetworks.asSequence()
+                .filter { network ->
+                    cm.getNetworkCapabilities(network)
+                        ?.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) == true
+                }
+                .mapNotNull { network -> cm.getLinkProperties(network)?.httpProxy }
+                .firstOrNull { proxy -> !proxy.host.isNullOrEmpty() }
         }.getOrNull()
 
         val httpHost = (info?.host?.takeIf { it.isNotEmpty() } ?: fallbackHost)

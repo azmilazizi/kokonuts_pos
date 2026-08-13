@@ -8,6 +8,7 @@ class PosItem {
     required this.groupId,
     required this.barcode,
     required this.skuCode,
+    this.cost = 0.0,
     this.modifierGroupIds = const [],
     this.bundleModifierGroups = const [],
   });
@@ -18,6 +19,7 @@ class PosItem {
   final String groupId;
   final String barcode;
   final String skuCode;
+  final double cost;
   final List<String> modifierGroupIds;
   final List<BundleModifierGroup> bundleModifierGroups;
 
@@ -56,6 +58,7 @@ class PosItem {
       groupId: json['sub_group']?.toString() ?? '0',
       barcode: json['commodity_barcode']?.toString() ?? '',
       skuCode: json['sku_code']?.toString() ?? '',
+      cost: double.tryParse(json['cost']?.toString() ?? '') ?? 0.0,
       modifierGroupIds: modifierGroupIds,
       bundleModifierGroups: bundleModifierGroups,
     );
