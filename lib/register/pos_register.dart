@@ -10,6 +10,7 @@ import '../models/pos_item.dart';
 import '../models/pos_modifier_group.dart';
 import '../services/cfd_settings_service.dart';
 import '../services/customer_service.dart';
+import '../widgets/recipe_dialog.dart';
 import 'duitnow_payment_dialog.dart';
 import '../services/bt_printer_service.dart';
 import '../services/label_printer_service.dart';
@@ -89,6 +90,7 @@ class _Product {
     required this.price,
     this.cost = 0.0,
     this.modifierGroups = const [],
+    this.instructions = '',
   });
   final String id;
   final String name;
@@ -96,6 +98,7 @@ class _Product {
   final double price;
   final double cost;
   final List<_ModifierGroup> modifierGroups;
+  final String instructions;
   bool get hasModifiers => modifierGroups.isNotEmpty;
 }
 
@@ -371,6 +374,7 @@ class _PosRegisterState extends State<PosRegister>
         price: item.price,
         cost: item.cost,
         modifierGroups: mGroups,
+        instructions: item.instructions,
       );
     }).toList();
 
@@ -752,12 +756,16 @@ class _PosRegisterState extends State<PosRegister>
       }
 
       if (!isOffline && _cashbackAmount > 0 && _selectedCustomer != null) {
-        await OrderService().redeemCashback(
-          token: token,
-          customerId: _selectedCustomer!.id,
-          receiptId: result.receiptId,
-          amount: _cashbackAmount,
-        );
+        try {
+          await OrderService().redeemCashback(
+            token: token,
+            customerId: _selectedCustomer!.id,
+            receiptId: result.receiptId,
+            amount: _cashbackAmount,
+          );
+        } catch (e) {
+          debugPrint('Cashback redeem failed: $e');
+        }
       }
 
       if (!isOffline && _appliedVoucher != null) {
@@ -2049,6 +2057,7 @@ class _PosRegisterState extends State<PosRegister>
       child: InkWell(
         borderRadius: BorderRadius.circular(6),
         onTap: widget.shiftOpen ? () => _tapProduct(product) : null,
+        onLongPress: () => _showProductRecipeDialog(product),
         child: Padding(
           padding: const EdgeInsets.all(8),
           child: Column(
@@ -2073,6 +2082,33 @@ class _PosRegisterState extends State<PosRegister>
           ),
         ),
       ),
+    );
+  }
+
+  // Returns the real modifier IDs (as sent on the order) that are selected on
+  // this cart item — only shared Modifier Group picks resolve to a BOM
+  // "requires_conditions" match (see Api::product_recipe()), bundle-group
+  // picks aren't part of the recipe/BOM system so they're skipped here.
+  List<String> _selectedModifierIdsFor(_CartItem item) {
+    final ids = <String>[];
+    for (final group in item.product.modifierGroups) {
+      final selectedNames = item.selectedModifiers[group.name] ?? {};
+      for (final mod in group.modifiers) {
+        if (selectedNames.contains(mod.name)) {
+          ids.add(mod.id);
+        }
+      }
+    }
+    return ids;
+  }
+
+  void _showProductRecipeDialog(_Product product, {List<String> modifierIds = const []}) {
+    showRecipeDialog(
+      context,
+      itemId: product.id,
+      itemName: product.name,
+      modifierIds: modifierIds,
+      instructions: product.instructions,
     );
   }
 
@@ -2482,6 +2518,7 @@ class _PosRegisterState extends State<PosRegister>
         ),
       ),
       onTap: widget.shiftOpen ? () => _tapProduct(product) : null,
+      onLongPress: () => _showProductRecipeDialog(product),
     );
   }
 
@@ -2622,9 +2659,16 @@ class _PosRegisterState extends State<PosRegister>
                         item: item,
                         summary: _modifierSummary(item),
                         isFreeItem: isFreeItem,
-                        onTap: () => _showModifierModal(
+                        onTap: paymentMode
+                            ? () => _showProductRecipeDialog(
+                                item.product,
+                                modifierIds: _selectedModifierIdsFor(item))
+                            : () => _showModifierModal(
+                                item.product,
+                                editItem: item),
+                        onLongPress: () => _showProductRecipeDialog(
                             item.product,
-                            editItem: item),
+                            modifierIds: _selectedModifierIdsFor(item)),
                         onDelete: () {
                           setState(() {
                             if (isFreeItem) {
@@ -3327,6 +3371,7 @@ class _SlidableCartRow extends StatefulWidget {
     required this.summary,
     required this.onTap,
     required this.onDelete,
+    this.onLongPress,
     this.isFreeItem = false,
   });
 
@@ -3334,6 +3379,7 @@ class _SlidableCartRow extends StatefulWidget {
   final String summary;
   final VoidCallback onTap;
   final VoidCallback onDelete;
+  final VoidCallback? onLongPress;
   final bool isFreeItem;
 
   @override
@@ -3378,6 +3424,7 @@ class _SlidableCartRowState extends State<_SlidableCartRow> {
                 widget.onTap();
               }
             },
+            onLongPress: _dx == 0.0 ? widget.onLongPress : null,
             child: Transform.translate(
               offset: Offset(_dx, 0),
               child: Container(

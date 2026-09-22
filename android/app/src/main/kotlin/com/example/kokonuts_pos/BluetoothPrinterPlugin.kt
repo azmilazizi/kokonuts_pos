@@ -15,6 +15,7 @@ class BluetoothPrinterPlugin(private val context: Context) {
         const val CHANNEL = "kokonuts/bt_printer"
         // Serial Port Profile UUID — understood by all Classic BT receipt printers.
         private val SPP_UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
+        private const val SEND_TIMEOUT_MS = 10_000L
     }
 
     fun registerWith(messenger: BinaryMessenger) {
@@ -54,14 +55,28 @@ class BluetoothPrinterPlugin(private val context: Context) {
         adapter.cancelDiscovery() // discovery interferes with RFCOMM throughput
 
         var socket: BluetoothSocket? = null
+        // socket.connect()/write() are blocking calls with no timeout parameter,
+        // and a dead/half-open printer connection can wedge them forever. A
+        // watchdog force-closes the socket after a bound, which unblocks the
+        // call with an IOException instead of hanging indefinitely.
+        val watchdog = Thread {
+            try {
+                Thread.sleep(SEND_TIMEOUT_MS)
+                socket?.close()
+            } catch (_: InterruptedException) {
+            } catch (_: IOException) {
+            }
+        }
         try {
             socket = device.createRfcommSocketToServiceRecord(SPP_UUID)
+            watchdog.start()
             socket.connect()
             socket.outputStream.write(data)
             socket.outputStream.flush()
             // Small delay so the printer finishes processing before we close.
             Thread.sleep(600)
         } finally {
+            watchdog.interrupt()
             try { socket?.close() } catch (_: IOException) {}
         }
     }

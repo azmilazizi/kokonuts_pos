@@ -11,6 +11,7 @@ class PosItem {
     this.cost = 0.0,
     this.modifierGroupIds = const [],
     this.bundleModifierGroups = const [],
+    this.instructions = '',
   });
 
   final String id;
@@ -22,6 +23,7 @@ class PosItem {
   final double cost;
   final List<String> modifierGroupIds;
   final List<BundleModifierGroup> bundleModifierGroups;
+  final String instructions;
 
   static PosItem? fromJson(Map<String, dynamic> json) {
     if (json['can_be_sold'] != 'can_be_sold') return null;
@@ -61,6 +63,7 @@ class PosItem {
       cost: double.tryParse(json['cost']?.toString() ?? '') ?? 0.0,
       modifierGroupIds: modifierGroupIds,
       bundleModifierGroups: bundleModifierGroups,
+      instructions: json['instructions']?.toString() ?? '',
     );
   }
 }

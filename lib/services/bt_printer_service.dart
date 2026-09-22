@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:isolate';
 
 import 'package:flutter/foundation.dart';
@@ -12,6 +13,11 @@ import 'store_config_service.dart';
 class BtPrinterService {
   static const _ch = MethodChannel('kokonuts/bt_printer');
   static Future<void> _queue = Future.value();
+
+  // A stalled RFCOMM connect()/write() on the native side can otherwise hang
+  // this call forever, wedging the payment screen and every print job queued
+  // behind it. Bound the wait so a dead/out-of-range printer fails fast.
+  static const _sendTimeout = Duration(seconds: 12);
 
   Future<void> printCommands(
     String macAddress,
@@ -60,8 +66,11 @@ class BtPrinterService {
         await _ch.invokeMethod<void>('print', {
           'address': macAddress,
           'data': bytes,
-        });
+        }).timeout(_sendTimeout);
         debugPrint('BtPrinterService: send complete for $macAddress');
+      } on TimeoutException {
+        debugPrint('BtPrinterService: send timed out for $macAddress');
+        return;
       } on PlatformException {
         debugPrint('BtPrinterService: send failed for $macAddress');
         return;

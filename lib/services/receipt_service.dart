@@ -116,19 +116,23 @@ class ReceiptSummary {
 class ReceiptLineItem {
   const ReceiptLineItem({
     required this.id,
+    required this.itemId,
     required this.itemName,
     required this.quantity,
     required this.unitPrice,
     required this.modifierNames,
+    required this.modifierIds,
     required this.modifiersPrice,
     required this.totalMoney,
   });
 
   final int id;
+  final String itemId;
   final String itemName;
   final double quantity;
   final double unitPrice;
   final List<String> modifierNames;
+  final List<String> modifierIds;
   final double modifiersPrice;
   final double totalMoney;
 
@@ -140,14 +144,23 @@ class ReceiptLineItem {
         if (m != null) mods.add(m.toString());
       }
     }
+    final rawModIds = json['modifier_ids'];
+    final modIds = <String>[];
+    if (rawModIds is List) {
+      for (final m in rawModIds) {
+        if (m != null) modIds.add(m.toString());
+      }
+    }
     return ReceiptLineItem(
       id: int.tryParse(json['id']?.toString() ?? '') ?? 0,
+      itemId: json['item_id']?.toString() ?? '',
       itemName: json['item_name']?.toString() ?? '',
       quantity:
           double.tryParse(json['quantity']?.toString() ?? '') ?? 1.0,
       unitPrice:
           double.tryParse(json['unit_price']?.toString() ?? '') ?? 0.0,
       modifierNames: mods,
+      modifierIds: modIds,
       modifiersPrice:
           double.tryParse(json['modifiers_price']?.toString() ?? '') ?? 0.0,
       totalMoney:
