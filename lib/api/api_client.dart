@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
@@ -83,6 +84,27 @@ class ApiClient {
         )
         .timeout(AppConfig.requestTimeout);
     return _decodeResponse(response);
+  }
+
+  /// For non-JSON responses (e.g. a PDF) — everything else on this client
+  /// assumes a JSON envelope, which a binary body isn't.
+  Future<Uint8List> getBytes(String path,
+      {Map<String, String>? queryParameters,
+      Map<String, String>? headers,
+      String? authToken}) async {
+    final uri = buildUri(path, queryParameters);
+    final response = await _client
+        .get(uri, headers: _defaultHeaders(headers, authToken: authToken))
+        .timeout(AppConfig.requestTimeout);
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw ApiException(
+        response.body.isEmpty ? 'Unexpected response.' : response.body,
+        statusCode: response.statusCode,
+      );
+    }
+
+    return response.bodyBytes;
   }
 
   Future<ApiStatus> ping() async {

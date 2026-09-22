@@ -40,6 +40,8 @@ dependencies:
   connectivity_plus: ^6.1.4
   path: ^1.9.1
   qr: ^3.0.2
+  flutter_widget_from_html_core: ^0.17.3
+  printing: ^5.13.4
 
 dev_dependencies:
   flutter_test:

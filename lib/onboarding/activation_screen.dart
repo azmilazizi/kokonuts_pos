@@ -55,6 +55,8 @@ class _ActivationScreenState extends State<ActivationScreen> {
       final staff = data['staff'] as Map<String, dynamic>;
       final access = (data['access'] as List<dynamic>)[0] as Map<String, dynamic>;
       final warehouse = access['warehouse'] as Map<String, dynamic>;
+      // Defaults to 'outlet' for backends/tokens predating warehouse_type.
+      final warehouseType = (warehouse['type'] as String?) ?? 'outlet';
 
       final prefs = await SharedPreferences.getInstance();
       await Future.wait([
@@ -68,6 +70,7 @@ class _ActivationScreenState extends State<ActivationScreen> {
           warehouseId: warehouse['id'].toString(),
           staffName: staff['full_name'] as String,
           warehouseName: warehouse['name'] as String,
+          warehouseType: warehouseType,
         ),
         prefs.remove('shift_is_open'),
         prefs.remove('shift_id'),

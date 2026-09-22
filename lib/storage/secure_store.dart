@@ -12,6 +12,7 @@ class SecureStore {
   static const String _warehouseCodeKey = 'warehouse_code';
   static const String _warehouseIdKey = 'warehouse_id';
   static const String _warehouseNameKey = 'warehouse_name';
+  static const String _warehouseTypeKey = 'warehouse_type';
   static const String _queueNumberKey = 'queue_number';
 
   final FlutterSecureStorage _storage;
@@ -43,6 +44,11 @@ class SecureStore {
   Future<String?> readWarehouseId() => _safeRead(_warehouseIdKey);
 
   Future<String?> readWarehouseName() => _safeRead(_warehouseNameKey);
+
+  /// 'hq' or 'outlet' (default). Determines whether the app boots into the
+  /// HQ shell (Production / Sell to Franchise or Client) or the normal
+  /// customer-facing register.
+  Future<String?> readWarehouseType() => _safeRead(_warehouseTypeKey);
 
   Future<int?> readQueueNumber() async {
     final v = await _safeRead(_queueNumberKey);
@@ -76,6 +82,7 @@ class SecureStore {
     String? warehouseId,
     String? staffName,
     String? warehouseName,
+    String? warehouseType,
   }) {
     return Future.wait([
       _storage.write(key: _activationEmailKey, value: email),
@@ -86,6 +93,8 @@ class SecureStore {
         _storage.write(key: _staffNameKey, value: staffName),
       if (warehouseName != null)
         _storage.write(key: _warehouseNameKey, value: warehouseName),
+      if (warehouseType != null)
+        _storage.write(key: _warehouseTypeKey, value: warehouseType),
     ]);
   }
 
@@ -103,6 +112,7 @@ class SecureStore {
       _storage.delete(key: _warehouseIdKey),
       _storage.delete(key: _staffNameKey),
       _storage.delete(key: _warehouseNameKey),
+      _storage.delete(key: _warehouseTypeKey),
     ]);
   }
 }

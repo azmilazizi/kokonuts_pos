@@ -11,8 +11,12 @@ import 'onboarding/activation_screen.dart';
 import 'models/pos_group.dart';
 import 'models/pos_item.dart';
 import 'models/pos_modifier_group.dart';
+import 'equipment_checklist/equipment_checklist_screen.dart';
+import 'hq/hq_shell.dart';
+import 'reminders/reminders_screen.dart';
 import 'register/pos_register.dart';
 import 'register/syncing_screen.dart';
+import 'services/checklist_service.dart';
 import 'services/delivery_print_job_poller.dart';
 import 'services/http_proxy_overrides.dart';
 import 'services/items_service.dart';
@@ -26,7 +30,10 @@ import 'services/label_printer_service.dart';
 import 'services/printer_config_service.dart';
 import 'services/receipt_service.dart';
 
+import 'storage/reminder_store.dart';
 import 'storage/secure_store.dart';
+import 'widgets/recipe_dialog.dart';
+import 'widgets/sop_instructions_dialog.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -116,7 +123,11 @@ class _AppStartState extends State<AppStart> with WidgetsBindingObserver {
         token: activationToken,
       );
       if (isValid) {
-        return const _StartDecision(showActivation: false);
+        final warehouseType = await _secureStore.readWarehouseType();
+        return _StartDecision(
+          showActivation: false,
+          isHqWarehouse: warehouseType == 'hq',
+        );
       }
     } catch (_) {
       // Ignore and fall through to reactivation flow.
@@ -273,6 +284,10 @@ class _AppStartState extends State<AppStart> with WidgetsBindingObserver {
           return AuthScreen(onAuthenticated: _handleAuthenticated);
         }
 
+        if (decision.isHqWarehouse) {
+          return HqShell(onSignOut: _handleSignOut);
+        }
+
         return RegisterScreen(onSignOut: _handleSignOut);
       },
     );
@@ -283,10 +298,12 @@ class _StartDecision {
   const _StartDecision({
     required this.showActivation,
     this.showReactivationNotice = false,
+    this.isHqWarehouse = false,
   });
 
   final bool showActivation;
   final bool showReactivationNotice;
+  final bool isHqWarehouse;
 }
 
 class RegisterScreen extends StatefulWidget {
@@ -379,6 +396,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
       icon: Icons.settings,
       description: 'Customize preferences and manage staff access.',
     ),
+    _SidebarDestination(
+      label: 'Equipment Checklist',
+      icon: Icons.checklist,
+      description: 'Pack and verify event equipment, home and on-site.',
+    ),
+    _SidebarDestination(
+      label: 'Reminders',
+      icon: Icons.notifications_active,
+      description: 'Restock reminders flagged for next time.',
+    ),
   ];
 
   void _toggleSidebar() {
@@ -412,6 +439,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     _refreshSyncStatus();
     _loadWarehouseDetails();
     _loadShiftState();
+    ReminderStore().refreshCount();
     _receiptSearchController.addListener(_onReceiptSearchChanged);
     _deliveryPoller.start(
       tokenProvider: () => _secureStore.readToken(),
@@ -626,13 +654,62 @@ class _RegisterScreenState extends State<RegisterScreen> {
     }
   }
 
-  void _openShift() {
+  Future<void> _openShift() async {
     SunmiPrinterService().openCashDrawer();
-    _showOpeningAmountDialog();
+    final checklistResult = await _runSopChecklist('sop_open', 'Opening Checklist');
+    if (!mounted) return;
+    _showOpeningAmountDialog(checklistResult: checklistResult);
   }
 
-  Future<void> _closeShift(double actualCash) async {
+  // Fetches the SOP template for [type] and shows its instructions as
+  // read-only text if one is configured. Soft-fails to null on any error or
+  // when nothing is configured — the shift flow must never be blocked by
+  // this step.
+  Future<SopChecklistResult?> _runSopChecklist(String type, String title) async {
+    try {
+      final token = await _secureStore.readToken();
+      final template = await ChecklistService().fetchTemplate(token ?? '', type);
+      final instructions = template?.sopText?.trim();
+      if (template == null || instructions == null || instructions.isEmpty) {
+        return null;
+      }
+      if (!mounted) return null;
+
+      // Best-effort: lets {{placeholder}} text be color-coded as a group vs
+      // an item. If this fetch fails, placeholders just render in the
+      // neutral "unrecognized" style — never blocks showing the SOP itself.
+      Set<String> groupNames = const {};
+      Set<String> itemNames = const {};
+      try {
+        final equipment = await ChecklistService().fetchTemplate(token ?? '', 'equipment');
+        if (equipment != null) {
+          groupNames = equipment.groups.map((g) => g.name).toSet();
+          itemNames = equipment.allItems.map((i) => i.label).toSet();
+        }
+      } catch (_) {
+        // Ignore — placeholders fall back to the neutral highlight style.
+      }
+      if (!mounted) return null;
+
+      return await showSopInstructionsDialog(
+        context,
+        templateId: template.id,
+        title: title,
+        instructions: instructions,
+        groupNames: groupNames,
+        itemNames: itemNames,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _closeShift(
+    double actualCash, {
+    SopChecklistResult? checklistResult,
+  }) async {
     final token = await _secureStore.readToken();
+    final employeeId = int.tryParse(await _secureStore.readStaffId() ?? '');
 
     // If _shiftId is missing, try to recover it from the server.
     String? shiftId = _shiftId;
@@ -652,7 +729,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     await _apiClient.postJson(
       '/pos/api/v1/shifts/$shiftId/close',
-      body: {'actual_cash': actualCash},
+      body: {
+        'actual_cash': actualCash,
+        if (employeeId != null) 'employee_id': employeeId,
+        if (checklistResult != null) 'checklist': checklistResult.toJson(),
+      },
       authToken: token,
     );
     final prefs = await SharedPreferences.getInstance();
@@ -894,11 +975,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   Future<void> _closeShiftWithFeedback(
     BuildContext context,
-    double actualCash,
-  ) async {
+    double actualCash, {
+    SopChecklistResult? checklistResult,
+  }) async {
     final messenger = ScaffoldMessenger.of(context);
     try {
-      await _closeShift(actualCash);
+      await _closeShift(actualCash, checklistResult: checklistResult);
     } on ApiException catch (e) {
       if (!mounted) return;
       messenger.showSnackBar(
@@ -912,7 +994,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     }
   }
 
-  void _showOpeningAmountDialog() {
+  void _showOpeningAmountDialog({SopChecklistResult? checklistResult}) {
     final amountCtrl = TextEditingController(text: '0.00');
     bool isSubmitting = false;
     showDialog<void>(
@@ -984,9 +1066,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                   try {
                                     final token = await _secureStore
                                         .readToken();
+                                    final employeeId = int.tryParse(
+                                      await _secureStore.readStaffId() ?? '',
+                                    );
                                     final res = await _apiClient.postJson(
                                       '/pos/api/v1/shifts/open',
-                                      body: {'opening_float': amount},
+                                      body: {
+                                        'opening_float': amount,
+                                        if (employeeId != null)
+                                          'employee_id': employeeId,
+                                        if (checklistResult != null)
+                                          'checklist': checklistResult
+                                              .toJson(),
+                                      },
                                       authToken: token,
                                     );
                                     final resData =
@@ -1340,7 +1432,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   ? null
                   : () async {
                       setDialog(() => isSubmitting = true);
-                      await _closeShiftWithFeedback(ctx, amount);
+                      final checklistResult = await _runSopChecklist(
+                        'sop_close',
+                        'Closing Checklist',
+                      );
+                      if (!ctx.mounted) return;
+                      await _closeShiftWithFeedback(
+                        ctx,
+                        amount,
+                        checklistResult: checklistResult,
+                      );
                       if (ctx.mounted) Navigator.pop(ctx);
                     },
               style: ElevatedButton.styleFrom(
@@ -2111,45 +2212,59 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             child: Center(child: CircularProgressIndicator()),
                           )
                         else if (detail != null) ...[
-                          for (final item in detail.lineItems) ...[
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    item.itemName,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ),
-                                Text('RM${item.totalMoney.toStringAsFixed(2)}'),
-                              ],
-                            ),
-                            Padding(
-                              padding: const EdgeInsets.only(top: 2, bottom: 8),
+                          for (final item in detail.lineItems)
+                            InkWell(
+                              onTap: item.itemId.isEmpty
+                                  ? null
+                                  : () => showRecipeDialog(
+                                        context,
+                                        itemId: item.itemId,
+                                        itemName: item.itemName,
+                                        modifierIds: item.modifierIds,
+                                      ),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(
-                                    '${item.quantity.toStringAsFixed(0)} × RM${item.unitPrice.toStringAsFixed(2)}',
-                                    style: const TextStyle(
-                                      fontSize: 13,
-                                      color: Color(0xFF9E9E9E),
+                                  Row(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          item.itemName,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ),
+                                      Text('RM${item.totalMoney.toStringAsFixed(2)}'),
+                                    ],
+                                  ),
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 2, bottom: 8),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          '${item.quantity.toStringAsFixed(0)} × RM${item.unitPrice.toStringAsFixed(2)}',
+                                          style: const TextStyle(
+                                            fontSize: 13,
+                                            color: Color(0xFF9E9E9E),
+                                          ),
+                                        ),
+                                        for (final mod in item.modifierNames)
+                                          Text(
+                                            mod,
+                                            style: const TextStyle(
+                                              fontSize: 13,
+                                              color: Color(0xFF9E9E9E),
+                                            ),
+                                          ),
+                                      ],
                                     ),
                                   ),
-                                  for (final mod in item.modifierNames)
-                                    Text(
-                                      mod,
-                                      style: const TextStyle(
-                                        fontSize: 13,
-                                        color: Color(0xFF9E9E9E),
-                                      ),
-                                    ),
                                 ],
                               ),
                             ),
-                          ],
                         ],
                         const Divider(height: 24),
                         // Subtotal / discount / delivery fee breakdown
@@ -2841,6 +2956,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
         isSidebarVisible: _isSidebarVisible,
         activationEmail: _activationEmail,
       );
+    } else if (_selectedIndex == 5) {
+      mainContent = EquipmentChecklistScreen(
+        header: _buildPageAppBar(destination.label),
+      );
+    } else if (_selectedIndex == 6) {
+      mainContent = RemindersScreen(
+        header: _buildPageAppBar(destination.label),
+      );
     } else {
       mainContent = Column(
         children: [
@@ -2988,6 +3111,22 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               isSelected: _selectedIndex == 4,
                               onTap: () => _selectDestination(4),
                             ),
+                            _SidebarItem(
+                              label: _destinations[5].label,
+                              icon: _destinations[5].icon,
+                              isSelected: _selectedIndex == 5,
+                              onTap: () => _selectDestination(5),
+                            ),
+                            ValueListenableBuilder<int>(
+                              valueListenable: ReminderStore.countNotifier,
+                              builder: (context, count, _) => _SidebarItem(
+                                label: _destinations[6].label,
+                                icon: _destinations[6].icon,
+                                isSelected: _selectedIndex == 6,
+                                badgeCount: count,
+                                onTap: () => _selectDestination(6),
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -3134,6 +3273,7 @@ class _SidebarItem extends StatelessWidget {
     required this.icon,
     this.isSelected = false,
     this.disabled = false,
+    this.badgeCount = 0,
   });
 
   final String label;
@@ -3141,6 +3281,7 @@ class _SidebarItem extends StatelessWidget {
   final bool disabled;
   final VoidCallback onTap;
   final IconData icon;
+  final int badgeCount;
 
   @override
   Widget build(BuildContext context) {
@@ -3176,6 +3317,23 @@ class _SidebarItem extends StatelessWidget {
                   ),
                 ),
               ),
+              if (badgeCount > 0)
+                Container(
+                  margin: const EdgeInsets.only(right: 16),
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFD32F2F),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    badgeCount > 99 ? '99+' : '$badgeCount',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
             ],
           ),
         ),
