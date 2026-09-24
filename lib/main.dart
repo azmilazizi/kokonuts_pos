@@ -16,6 +16,7 @@ import 'hq/hq_shell.dart';
 import 'reminders/reminders_screen.dart';
 import 'register/pos_register.dart';
 import 'register/syncing_screen.dart';
+import 'sop/sop_screen.dart';
 import 'services/delivery_print_job_poller.dart';
 import 'services/http_proxy_overrides.dart';
 import 'services/items_service.dart';
@@ -404,6 +405,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
       label: 'Reminders',
       icon: Icons.notifications_active,
       description: 'Restock reminders flagged for next time.',
+    ),
+    _SidebarDestination(
+      label: 'SOP',
+      icon: Icons.rule,
+      description: 'Opening and closing standard operating procedures.',
     ),
   ];
 
@@ -2912,6 +2918,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
       mainContent = RemindersScreen(
         header: _buildPageAppBar(destination.label),
       );
+    } else if (_selectedIndex == 7) {
+      mainContent = SopScreen(
+        header: _buildPageAppBar(destination.label),
+      );
     } else {
       mainContent = Column(
         children: [
@@ -3058,6 +3068,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               icon: _destinations[4].icon,
                               isSelected: _selectedIndex == 4,
                               onTap: () => _selectDestination(4),
+                            ),
+                            _SidebarItem(
+                              label: _destinations[7].label,
+                              icon: _destinations[7].icon,
+                              isSelected: _selectedIndex == 7,
+                              onTap: () => _selectDestination(7),
                             ),
                             _SidebarItem(
                               label: _destinations[5].label,

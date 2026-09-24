@@ -3,13 +3,10 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/bt_printer_service.dart';
-import '../services/checklist_service.dart';
 import '../services/printer_config_service.dart';
 import '../services/sunmi_display_service.dart';
-import '../storage/secure_store.dart';
-import '../widgets/sop_instructions_dialog.dart';
 
-enum _SettingTab { printers, customerDisplays, taxes, general, sop }
+enum _SettingTab { printers, customerDisplays, taxes, general }
 
 enum _DeviceType { bluetooth, usb }
 
@@ -399,8 +396,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         return 'Taxes';
       case _SettingTab.general:
         return 'General';
-      case _SettingTab.sop:
-        return 'SOP';
     }
   }
 
@@ -561,13 +556,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 onTap: () => setState(() => _selectedTab = _SettingTab.general),
               ),
               const Divider(height: 1),
-              _SettingsNavItem(
-                icon: Icons.rule,
-                label: 'SOP',
-                isSelected: _selectedTab == _SettingTab.sop,
-                onTap: () => setState(() => _selectedTab = _SettingTab.sop),
-              ),
-              const Divider(height: 1),
             ],
           ),
         ),
@@ -585,8 +573,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         return _buildTaxesContent();
       case _SettingTab.general:
         return _buildGeneralContent();
-      case _SettingTab.sop:
-        return _buildSopContent();
     }
   }
 
@@ -1081,107 +1067,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  // ─── SOP tab ──────────────────────────────────────────────────────────────
-
-  Widget _buildSopContent() {
-    return Container(
-      color: const Color(0xFFF5F6FA),
-      child: ListView(
-        padding: const EdgeInsets.all(24),
-        children: [
-          const Text(
-            'STANDARD OPERATING PROCEDURES',
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.8,
-              color: Color(0xFF757575),
-            ),
-          ),
-          const SizedBox(height: 8),
-          _sopTile(
-            icon: Icons.wb_sunny_outlined,
-            title: 'Opening SOP',
-            subtitle: 'Steps to follow when opening the shift',
-            onTap: () => _showSop('sop_open', 'Opening SOP'),
-          ),
-          const SizedBox(height: 12),
-          _sopTile(
-            icon: Icons.nights_stay_outlined,
-            title: 'Closing SOP',
-            subtitle: 'Steps to follow when closing the shift',
-            onTap: () => _showSop('sop_close', 'Closing SOP'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _sopTile({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required VoidCallback onTap,
-  }) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFE0E0E0)),
-      ),
-      child: ListTile(
-        leading: Icon(icon, color: _kGreen),
-        title: Text(title),
-        subtitle: Text(subtitle),
-        trailing: const Icon(Icons.chevron_right),
-        onTap: onTap,
-      ),
-    );
-  }
-
-  // Fetches the SOP template for [type] and shows its instructions read-only
-  // — no longer a gate before opening/closing shift, just a reference staff
-  // can look up anytime from here.
-  Future<void> _showSop(String type, String title) async {
-    const secureStore = SecureStore();
-    final token = await secureStore.readToken();
-    final template = await ChecklistService().fetchTemplate(token ?? '', type);
-    final instructions = template?.sopText?.trim();
-    if (template == null || instructions == null || instructions.isEmpty) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No SOP configured for this outlet yet.')),
-        );
-      }
-      return;
-    }
-    if (!mounted) return;
-
-    // Best-effort: lets {{placeholder}} text be color-coded as a group vs an
-    // item. If this fetch fails, placeholders just render in the neutral
-    // "unrecognized" style — never blocks showing the SOP itself.
-    Set<String> groupNames = const {};
-    Set<String> itemNames = const {};
-    try {
-      final equipment = await ChecklistService().fetchTemplate(token ?? '', 'equipment');
-      if (equipment != null) {
-        groupNames = equipment.groups.map((g) => g.name).toSet();
-        itemNames = equipment.allItems.map((i) => i.label).toSet();
-      }
-    } catch (_) {
-      // Ignore — placeholders fall back to the neutral highlight style.
-    }
-    if (!mounted) return;
-
-    await showSopInstructionsDialog(
-      context,
-      templateId: template.id,
-      title: title,
-      instructions: instructions,
-      groupNames: groupNames,
-      itemNames: itemNames,
-    );
-  }
 }
 
 // ─── Printer config modal ─────────────────────────────────────────────────────
