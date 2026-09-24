@@ -137,6 +137,7 @@ class CatalogCache {
             'name': mod.name,
             'price_adjustment': mod.priceAdjustment,
             'sort_order': mod.sortOrder,
+            'is_default': mod.isDefault ? 1 : 0,
           });
         }
       }
@@ -196,6 +197,7 @@ class CatalogCache {
             name: row['name'] as String,
             priceAdjustment: (row['price_adjustment'] as num).toDouble(),
             sortOrder: row['sort_order'] as int,
+            isDefault: (row['is_default'] as int? ?? 0) == 1,
           ));
     }
 

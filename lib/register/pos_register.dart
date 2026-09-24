@@ -65,10 +65,16 @@ class PosRegister extends StatefulWidget {
 // ─── Models ──────────────────────────────────────────────────────────────────
 
 class _Modifier {
-  const _Modifier({required this.id, required this.name, required this.price});
+  const _Modifier({
+    required this.id,
+    required this.name,
+    required this.price,
+    this.isDefault = false,
+  });
   final String id;
   final String name;
   final double price;
+  final bool isDefault;
 }
 
 class _ModifierGroup {
@@ -356,7 +362,12 @@ class _PosRegisterState extends State<PosRegister>
                   name: g.name,
                   multiSelect: !g.isSingleSelect,
                   modifiers: g.modifiers
-                      .map((m) => _Modifier(id: m.id, name: m.name, price: m.priceAdjustment))
+                      .map((m) => _Modifier(
+                            id: m.id,
+                            name: m.name,
+                            price: m.priceAdjustment,
+                            isDefault: m.isDefault,
+                          ))
                       .toList(),
                 )),
         ...item.bundleModifierGroups.map((g) => _ModifierGroup(
@@ -3567,6 +3578,17 @@ class _ModifierModalState extends State<_ModifierModal> {
     _selected = {};
     for (final e in widget.initialSelected.entries) {
       _selected[e.key] = Set<String>.from(e.value);
+    }
+    // A group with no prior selection (adding fresh, not editing an existing
+    // line) starts from whichever of its options are flagged as the default
+    // in the Modifier admin screen — optional, most groups have none.
+    for (final group in widget.product.modifierGroups) {
+      if (_selected.containsKey(group.name)) continue;
+      final defaults = group.modifiers.where((m) => m.isDefault);
+      if (defaults.isEmpty) continue;
+      _selected[group.name] = group.multiSelect
+          ? defaults.map((m) => m.name).toSet()
+          : {defaults.first.name};
     }
     _quantity = widget.initialQuantity;
     _discountIsPercent = widget.initialDiscountIsPercent;

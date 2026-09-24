@@ -77,12 +77,14 @@ class PosModifier {
     required this.name,
     required this.priceAdjustment,
     required this.sortOrder,
+    this.isDefault = false,
   });
 
   final String id;
   final String name;
   final double priceAdjustment;
   final int sortOrder;
+  final bool isDefault;
 
   static PosModifier? fromJson(Map<String, dynamic> json) {
     if (json['active'] != '1') return null;
@@ -94,6 +96,7 @@ class PosModifier {
       priceAdjustment:
           double.tryParse(json['price_adjustment']?.toString() ?? '') ?? 0.0,
       sortOrder: int.tryParse(json['sort_order']?.toString() ?? '') ?? 0,
+      isDefault: json['is_default']?.toString() == '1',
     );
   }
 }
