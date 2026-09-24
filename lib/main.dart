@@ -16,7 +16,6 @@ import 'hq/hq_shell.dart';
 import 'reminders/reminders_screen.dart';
 import 'register/pos_register.dart';
 import 'register/syncing_screen.dart';
-import 'services/checklist_service.dart';
 import 'services/delivery_print_job_poller.dart';
 import 'services/http_proxy_overrides.dart';
 import 'services/items_service.dart';
@@ -656,52 +655,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   Future<void> _openShift() async {
     SunmiPrinterService().openCashDrawer();
-    final checklistResult = await _runSopChecklist('sop_open', 'Opening Checklist');
-    if (!mounted) return;
-    _showOpeningAmountDialog(checklistResult: checklistResult);
-  }
-
-  // Fetches the SOP template for [type] and shows its instructions as
-  // read-only text if one is configured. Soft-fails to null on any error or
-  // when nothing is configured — the shift flow must never be blocked by
-  // this step.
-  Future<SopChecklistResult?> _runSopChecklist(String type, String title) async {
-    try {
-      final token = await _secureStore.readToken();
-      final template = await ChecklistService().fetchTemplate(token ?? '', type);
-      final instructions = template?.sopText?.trim();
-      if (template == null || instructions == null || instructions.isEmpty) {
-        return null;
-      }
-      if (!mounted) return null;
-
-      // Best-effort: lets {{placeholder}} text be color-coded as a group vs
-      // an item. If this fetch fails, placeholders just render in the
-      // neutral "unrecognized" style — never blocks showing the SOP itself.
-      Set<String> groupNames = const {};
-      Set<String> itemNames = const {};
-      try {
-        final equipment = await ChecklistService().fetchTemplate(token ?? '', 'equipment');
-        if (equipment != null) {
-          groupNames = equipment.groups.map((g) => g.name).toSet();
-          itemNames = equipment.allItems.map((i) => i.label).toSet();
-        }
-      } catch (_) {
-        // Ignore — placeholders fall back to the neutral highlight style.
-      }
-      if (!mounted) return null;
-
-      return await showSopInstructionsDialog(
-        context,
-        templateId: template.id,
-        title: title,
-        instructions: instructions,
-        groupNames: groupNames,
-        itemNames: itemNames,
-      );
-    } catch (_) {
-      return null;
-    }
+    _showOpeningAmountDialog();
   }
 
   Future<void> _closeShift(
@@ -1432,15 +1386,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   ? null
                   : () async {
                       setDialog(() => isSubmitting = true);
-                      final checklistResult = await _runSopChecklist(
-                        'sop_close',
-                        'Closing Checklist',
-                      );
-                      if (!ctx.mounted) return;
                       await _closeShiftWithFeedback(
                         ctx,
                         amount,
-                        checklistResult: checklistResult,
                       );
                       if (ctx.mounted) Navigator.pop(ctx);
                     },
